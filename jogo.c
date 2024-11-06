@@ -1,5 +1,6 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_ttf.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <math.h>
@@ -10,8 +11,6 @@
 #define LARGURA_LIXO 20
 #define ALTURA_LIXO 20
 #define VELOCIDADE_LIXO 1
-#define LARGURA_TIRO 5
-#define ALTURA_TIRO 10
 #define VELOCIDADE_TIRO 5
 #define DELAY_TIRO 2000  // Delay de 2 segundos em milissegundos
 
@@ -19,15 +18,17 @@
 SDL_Color corRio = {0, 153, 153, 255};  // Cor do rio entre azul e verde (ciano)
 SDL_Color corMato = {34, 139, 34, 255}; // Verde para as margens (mato)
 SDL_Color corPonte = {169, 169, 169, 255};  // Cor da ponte (cinza)
-SDL_Color corLixo = {105, 105, 105, 255};  // Cor do lixo(cinza escuro)
-SDL_Color corTiro = {255, 255, 0, 255};  // Cor do tiro(amarelo)
 
+// Variáveis globais
 SDL_Window *tela = NULL;
 SDL_Renderer *renderizador = NULL;
 SDL_Texture *texturaCanhao = NULL;
+SDL_Texture *texturaTiro = NULL;
 
 typedef struct Lixo {
     int x, y;
+    int largura, altura;
+    SDL_Texture *textura;
     struct Lixo *proximo;
 } Lixo;
 
@@ -37,15 +38,54 @@ typedef struct Tiro {
     struct Tiro *proximo;
 } Tiro;
 
-// Cabeça da lista ligada para lixos e tiros
 Lixo *listaLixos = NULL;
 Tiro *listaTiros = NULL;
 
+// Função para carregar uma textura de emoji
+SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *emoji) {
+    SDL_Color branco = {255, 255, 255, 255};
+    SDL_Surface *surface = TTF_RenderUTF8_Blended(font, emoji, branco);
+    SDL_Texture *textura = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+    return textura;
+}
+
 // Função para adicionar lixo à lista
-void adicionarLixos(int x, int y) {
+void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTexturas, int totalProbabilidades) {
+    int x = (LARGURA_TELA / 6) + rand() % (LARGURA_TELA * 2 / 3);
+    int sorteio = rand() % totalProbabilidades;
+
+    int acumulador = 0;
+    int index = 0;
+    for (int i = 0; i < numTexturas; i++) {
+        acumulador += probabilidades[i];
+        if (sorteio < acumulador) {
+            index = i;
+            break;
+        }
+    }
+
     Lixo *novoLixo = (Lixo *)malloc(sizeof(Lixo));
     novoLixo->x = x;
-    novoLixo->y = y;
+    novoLixo->y = 0;
+    novoLixo->textura = texturas[index];
+
+    // Ajustar tamanhos para emojis específicos
+    //🥤", "🧃", "📦", "👟", "👕", "🎒", "🛞", "🪑", "🚽"
+    if (index == 2 || index == 6 || index == 7 || index == 8) {  // 📦, 🛞, 🪑, 🚽
+        novoLixo->largura = LARGURA_LIXO * 2;
+        novoLixo->altura = ALTURA_LIXO * 2;
+    }else if(index == 4 || index == 5 ){
+        novoLixo->largura = LARGURA_LIXO * 1.5;
+        novoLixo->altura = ALTURA_LIXO * 1.5;
+    }else if(index == 3){
+        novoLixo->largura = LARGURA_LIXO * 1.2;
+        novoLixo->altura = ALTURA_LIXO * 1.2;
+    }else{
+        novoLixo->largura = LARGURA_LIXO;
+        novoLixo->altura = ALTURA_LIXO;
+    }
+
     novoLixo->proximo = listaLixos;
     listaLixos = novoLixo;
 }
@@ -72,23 +112,17 @@ void tiros(float inicioX, float inicioY, float destinoX, float destinoY) {
     listaTiros = novoTiro;
 }
 
-// Função para atualizar e desenhar lixos
 void atualizarEDesenharLixos() {
     Lixo *atual = listaLixos;
     Lixo *anterior = NULL;
 
     while (atual != NULL) {
-        // Atualizar posição
         atual->y += VELOCIDADE_LIXO;
 
-        // Desenhar lixo
-        SDL_Rect retanguloLixo = {atual->x, atual->y, LARGURA_LIXO, ALTURA_LIXO};
-        SDL_SetRenderDrawColor(renderizador, corLixo.r, corLixo.g, corLixo.b, corLixo.a);
-        SDL_RenderFillRect(renderizador, &retanguloLixo);
+        SDL_Rect retanguloLixo = {atual->x, atual->y, atual->largura, atual->altura};
+        SDL_RenderCopy(renderizador, atual->textura, NULL, &retanguloLixo);
 
-        // Verificar se o lixo está fora da tela
         if (atual->y > ALTURA_TELA) {
-            // Remover lixo da lista
             if (anterior == NULL) {
                 listaLixos = atual->proximo;
                 free(atual);
@@ -105,37 +139,28 @@ void atualizarEDesenharLixos() {
     }
 }
 
-// Função para verificar colisão entre dois retângulos
 bool verificarColisao(SDL_Rect a, SDL_Rect b) {
-    if (a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h) {
-        return false;
-    }
-    return true;
+    return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
 }
 
-// Função para atualizar e desenhar tiros
 void atualizarEDesenharTiros() {
     Tiro *atual = listaTiros;
     Tiro *anterior = NULL;
 
     while (atual != NULL) {
-        // Atualizar posição
         atual->x += atual->vx;
         atual->y += atual->vy;
 
-        // Criar retângulo para tiro atual
-        SDL_Rect retanguloTiro = {(int)atual->x - LARGURA_TIRO / 2, (int)atual->y, LARGURA_TIRO, ALTURA_TIRO};
+        SDL_Rect retanguloTiro = {(int)atual->x - 10 / 2, (int)atual->y, 20, 20};
 
-        // Iterar sobre lixos para colisão
         Lixo *lixoAtual = listaLixos;
         Lixo *lixoAnterior = NULL;
         bool colisaoDetectada = false;
 
         while (lixoAtual != NULL && !colisaoDetectada) {
-            SDL_Rect retanguloLixo = {lixoAtual->x, lixoAtual->y, LARGURA_LIXO, ALTURA_LIXO};
+            SDL_Rect retanguloLixo = {lixoAtual->x, lixoAtual->y, lixoAtual->largura, lixoAtual->altura};
 
             if (verificarColisao(retanguloTiro, retanguloLixo)) {
-                // Remover lixo da lista
                 if (lixoAnterior == NULL) {
                     listaLixos = lixoAtual->proximo;
                     free(lixoAtual);
@@ -145,14 +170,13 @@ void atualizarEDesenharTiros() {
                     free(lixoAtual);
                     lixoAtual = lixoAnterior->proximo;
                 }
-                colisaoDetectada = true; // Sair após colisão
+                colisaoDetectada = true;
             } else {
                 lixoAnterior = lixoAtual;
                 lixoAtual = lixoAtual->proximo;
             }
         }
 
-        // Se uma colisão for detectada, remover tiro
         if (colisaoDetectada) {
             if (anterior == NULL) {
                 listaTiros = atual->proximo;
@@ -164,13 +188,9 @@ void atualizarEDesenharTiros() {
                 atual = anterior->proximo;
             }
         } else {
-            // Desenhar tiro
-            SDL_SetRenderDrawColor(renderizador, corTiro.r, corTiro.g, corTiro.b, corTiro.a);
-            SDL_RenderFillRect(renderizador, &retanguloTiro);
+            SDL_RenderCopy(renderizador, texturaTiro, NULL, &retanguloTiro);
 
-            // Verificar se o tiro está fora da tela
             if (atual->y < 0 || atual->y > ALTURA_TELA || atual->x < 0 || atual->x > LARGURA_TELA) {
-                // Remover tiro da lista
                 if (anterior == NULL) {
                     listaTiros = atual->proximo;
                     free(atual);
@@ -208,7 +228,11 @@ bool inicializarSDL() {
         return false;
     }
 
-    // Inicializa SDL_image com suporte a WebP
+    if (TTF_Init() == -1) {
+        SDL_Log("Erro ao inicializar SDL_ttf: %s", TTF_GetError());
+        return false;
+    }
+
     if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_WEBP) & (IMG_INIT_PNG | IMG_INIT_WEBP))) {
         SDL_Log("Erro ao inicializar SDL_image: %s", IMG_GetError());
         return false;
@@ -217,7 +241,7 @@ bool inicializarSDL() {
     return true;
 }
 
-bool carregarMidia() {
+bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas) {
     SDL_Surface *surfaceCarregada = IMG_Load("imagens/cannon-isolated-on-transparent-free-png.webp");
     if (!surfaceCarregada) {
         SDL_Log("Erro ao carregar imagem do canhão: %s", IMG_GetError());
@@ -230,19 +254,42 @@ bool carregarMidia() {
         SDL_Log("Erro ao criar textura do canhão: %s", SDL_GetError());
         return false;
     }
+
+    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 28); // Ajuste com uma fonte de emojis válida
+    if (!font) {
+        SDL_Log("Erro ao carregar fonte: %s", TTF_GetError());
+        return false;
+    }
+
+    texturaTiro = carregarEmoji(renderizador, font, "💣");
+    if (!texturaTiro) {
+        SDL_Log("Erro ao criar textura do tiro: %s", SDL_GetError());
+        TTF_CloseFont(font);
+        return false;
+    }
+
+    const char* emojis[] = {"🥤", "🧃", "📦", "👟", "👕", "🎒", "🛞", "🪑", "🚽"};
+    for (int i = 0; i < numTexturas; i++) {
+        texturasLixo[i] = carregarEmoji(renderizador, font, emojis[i]);
+        if (!texturasLixo[i]) {
+            SDL_Log("Erro ao criar textura do emoji de lixo: %s", SDL_GetError());
+            TTF_CloseFont(font);
+            return false;
+        }
+    }
+
+    TTF_CloseFont(font);
     return true;
 }
 
 void desenharCena() {
-    int larguraMargem = LARGURA_TELA / 6;  // Margens menores
-    int larguraRio = LARGURA_TELA - 2 * larguraMargem;  // Aumenta o rio
+    int larguraMargem = LARGURA_TELA / 6;
+    int larguraRio = LARGURA_TELA - 2 * larguraMargem;
 
-    // Desenhar o rio verticalmente centralizado
     SDL_Rect rio = {larguraMargem, 0, larguraRio, ALTURA_TELA};
     SDL_SetRenderDrawColor(renderizador, corRio.r, corRio.g, corRio.b, corRio.a);
     SDL_RenderFillRect(renderizador, &rio);
 
-    // Desenhar as margens verdes (mato) à esquerda e à direita do rio
     SDL_Rect margemEsquerda = {0, 0, larguraMargem, ALTURA_TELA};
     SDL_Rect margemDireita = {LARGURA_TELA - larguraMargem, 0, larguraMargem, ALTURA_TELA};
     SDL_SetRenderDrawColor(renderizador, corMato.r, corMato.g, corMato.b, corMato.a);
@@ -250,44 +297,36 @@ void desenharCena() {
     SDL_RenderFillRect(renderizador, &margemDireita);
 
     int alturaLinha = 10;
-
-    // Linha verde à esquerda
     SDL_Rect linhaVerdeEsquerda = {0, ALTURA_TELA - alturaLinha, larguraMargem, alturaLinha};
     SDL_SetRenderDrawColor(renderizador, corMato.r, corMato.g, corMato.b, corMato.a);
     SDL_RenderFillRect(renderizador, &linhaVerdeEsquerda);
 
-    // Linha ciano no centro
     SDL_Rect linhaCiano = {larguraMargem, ALTURA_TELA - alturaLinha, larguraRio, alturaLinha};
     SDL_SetRenderDrawColor(renderizador, corRio.r, corRio.g, corRio.b, corRio.a);
     SDL_RenderFillRect(renderizador, &linhaCiano);
 
-    // Linha verde à direita
     SDL_Rect linhaVerdeDireita = {LARGURA_TELA - larguraMargem, ALTURA_TELA - alturaLinha, larguraMargem, alturaLinha};
     SDL_SetRenderDrawColor(renderizador, corMato.r, corMato.g, corMato.b, corMato.a);
     SDL_RenderFillRect(renderizador, &linhaVerdeDireita);
 
-    // Desenhar a ponte acima da linha de cores
     int alturaPonte = 30;
     SDL_Rect ponte = {larguraMargem, ALTURA_TELA - alturaLinha - alturaPonte, larguraRio, alturaPonte};
     SDL_SetRenderDrawColor(renderizador, corPonte.r, corPonte.g, corPonte.b, corPonte.a);
     SDL_RenderFillRect(renderizador, &ponte);
 
-    // Desenhar a imagem do canhão centralizado na ponte
-    int larguraCano = 50;  // Ajuste conforme o tamanho da sua imagem
-    int alturaCano = 50; // Ajuste conforme o tamanho da sua imagem
+    int larguraCano = 50;
+    int alturaCano = 50;
     SDL_Rect retanguloCano = {(LARGURA_TELA - larguraCano) / 2, ALTURA_TELA - alturaLinha - alturaCano - 10, larguraCano, alturaCano};
     SDL_RenderCopy(renderizador, texturaCanhao, NULL, &retanguloCano);
 }
 
-void loopJogo() {
+void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
     bool rodando = true;
     SDL_Event evento;
 
-    // Determine o centro do canhão
     int canhaoX = LARGURA_TELA / 2;
     int canhaoY = ALTURA_TELA - 50;
 
-    // Controle de tempo para tiros
     Uint32 tempoUltimoTiro = 0;
 
     while (rodando) {
@@ -295,49 +334,38 @@ void loopJogo() {
             if (evento.type == SDL_QUIT) {
                 rodando = false;
             } else if (evento.type == SDL_MOUSEBUTTONDOWN && evento.button.button == SDL_BUTTON_LEFT) {
-                // Verifica se o tempo necessário passou para disparar outro tiro
                 Uint32 tempoAtual = SDL_GetTicks();
                 if (tempoAtual - tempoUltimoTiro >= DELAY_TIRO) {
-                    // Pega a posição do mouse para direção do tiro
                     int mouseX, mouseY;
                     SDL_GetMouseState(&mouseX, &mouseY);
                     tiros(canhaoX, canhaoY, mouseX, mouseY);
-                    tempoUltimoTiro = tempoAtual;  // Atualiza o tempo do último tiro
+                    tempoUltimoTiro = tempoAtual;
                 }
             }
         }
 
-        // Adicionar lixo aleatório com menor frequência
-        if (rand() % 150 == 0) {  // Aumentar o divisor reduz a frequência
-            int x = (LARGURA_TELA / 6) + rand() % (LARGURA_TELA * 2 / 3);
-            adicionarLixos(x, 0);
+        if (rand() % 150 == 0) {
+            adicionarLixos(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
         }
 
         SDL_RenderClear(renderizador);
 
-        // Desenhar a cena
         desenharCena();
-
-        // Atualizar e desenhar lixos
         atualizarEDesenharLixos();
-        
-        // Atualizar e desenhar tiros
         atualizarEDesenharTiros();
 
         SDL_RenderPresent(renderizador);
-        SDL_Delay(16);  // Controlar FPS
+        SDL_Delay(16);
     }
 }
 
-void fecharSDL() {
-    // Limpar lista de lixos
+void fecharSDL(SDL_Texture **texturasLixo, int numTexturas) {
     while (listaLixos != NULL) {
         Lixo *temp = listaLixos;
         listaLixos = listaLixos->proximo;
         free(temp);
     }
 
-    // Limpar lista de tiros
     while (listaTiros != NULL) {
         Tiro *temp = listaTiros;
         listaTiros = listaTiros->proximo;
@@ -345,25 +373,41 @@ void fecharSDL() {
     }
 
     SDL_DestroyTexture(texturaCanhao);
+    SDL_DestroyTexture(texturaTiro);
+
+    for (int i = 0; i < numTexturas; i++) {
+        SDL_DestroyTexture(texturasLixo[i]);
+    }
+
     SDL_DestroyRenderer(renderizador);
     SDL_DestroyWindow(tela);
     IMG_Quit();
+    TTF_Quit();
     SDL_Quit();
 }
 
 int main(int argc, char *argv[]) {
-    srand(time(NULL));  // Inicializa o gerador de números aleatórios com a hora atual
+    srand(time(NULL));
 
     if (!inicializarSDL()) {
         return -1;
     }
 
-    if (!carregarMidia()) {
+    const int numEmojis = 9;
+    SDL_Texture *texturasLixo[numEmojis];
+    //🥤", "🧃", "📦", "👟", "👕", "🎒", "🛞", "🪑", "🚽"
+    int probabilidades[] = {23, 23, 12, 10, 10, 10, 5, 5, 2}; 
+    int totalProbabilidades = 0;
+    for (int i = 0; i < numEmojis; i++) {
+        totalProbabilidades += probabilidades[i];
+    }
+
+    if (!carregarMidia(texturasLixo, numEmojis)) {
         SDL_Log("Falha ao carregar mídia!");
         return -1;
     }
 
-    loopJogo();
-    fecharSDL();
+    loopJogo(texturasLixo, probabilidades, numEmojis, totalProbabilidades);
+    fecharSDL(texturasLixo, numEmojis);
     return 0;
 }
