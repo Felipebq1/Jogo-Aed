@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>  
+#include <time.h>
 
 #define LARGURA_TELA 800
 #define ALTURA_TELA 600
@@ -12,7 +12,7 @@
 #define ALTURA_LIXO 20
 #define VELOCIDADE_LIXO 1
 #define VELOCIDADE_TIRO 5
-#define DELAY_TIRO 2000  // Delay de 2 segundos em milissegundos
+#define DELAY_TIRO 1000  // Delay de 1 segundo em milissegundos
 
 // Definir cores
 SDL_Color corRio = {0, 153, 153, 255};  // Cor do rio entre azul e verde (ciano)
@@ -38,8 +38,12 @@ typedef struct Tiro {
     struct Tiro *proximo;
 } Tiro;
 
+// Listas de lixos e tiros
 Lixo *listaLixos = NULL;
 Tiro *listaTiros = NULL;
+
+// Declaração antecipada da função loopJogo
+void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades);
 
 // Função para carregar uma textura de emoji
 SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *emoji) {
@@ -71,17 +75,16 @@ void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTextura
     novoLixo->textura = texturas[index];
 
     // Ajustar tamanhos para emojis específicos
-    //🥤", "🧃", "📦", "👟", "👕", "🎒", "🛞", "🪑", "🚽"
     if (index == 2 || index == 6 || index == 7 || index == 8) {  // 📦, 🛞, 🪑, 🚽
         novoLixo->largura = LARGURA_LIXO * 2;
         novoLixo->altura = ALTURA_LIXO * 2;
-    }else if(index == 4 || index == 5 ){
+    } else if(index == 4 || index == 5) {
         novoLixo->largura = LARGURA_LIXO * 1.5;
         novoLixo->altura = ALTURA_LIXO * 1.5;
-    }else if(index == 3){
+    } else if(index == 3) {
         novoLixo->largura = LARGURA_LIXO * 1.2;
         novoLixo->altura = ALTURA_LIXO * 1.2;
-    }else{
+    } else {
         novoLixo->largura = LARGURA_LIXO;
         novoLixo->altura = ALTURA_LIXO;
     }
@@ -320,45 +323,110 @@ void desenharCena() {
     SDL_RenderCopy(renderizador, texturaCanhao, NULL, &retanguloCano);
 }
 
+void desenharMenu() {
+    SDL_SetRenderDrawColor(renderizador, 0, 0, 0, 255);  // Preto para o fundo do menu
+    SDL_RenderClear(renderizador);
+
+    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 48);
+    SDL_Color branco = {255, 255, 255, 255};
+
+    SDL_Surface *textoIniciarSurface = TTF_RenderUTF8_Blended(font, "Iniciar Jogo", branco);
+    SDL_Texture *textoIniciar = SDL_CreateTextureFromSurface(renderizador, textoIniciarSurface);
+    SDL_Surface *textoSairSurface = TTF_RenderUTF8_Blended(font, "Sair", branco);
+    SDL_Texture *textoSair = SDL_CreateTextureFromSurface(renderizador, textoSairSurface);
+
+    SDL_Rect rectIniciar = {LARGURA_TELA / 2 - 100, ALTURA_TELA / 2 - 60, 200, 50};
+    SDL_Rect rectSair = {LARGURA_TELA / 2 - 50, ALTURA_TELA / 2 + 20, 100, 50};
+
+    SDL_RenderCopy(renderizador, textoIniciar, NULL, &rectIniciar);
+    SDL_RenderCopy(renderizador, textoSair, NULL, &rectSair);
+
+    SDL_RenderPresent(renderizador);
+
+    SDL_FreeSurface(textoIniciarSurface);
+    SDL_FreeSurface(textoSairSurface);
+    SDL_DestroyTexture(textoIniciar);
+    SDL_DestroyTexture(textoSair);
+    TTF_CloseFont(font);
+}
+
+void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
+    bool rodando = true;
+    bool menuAtivo = true;
+    SDL_Event evento;
+
+    while (rodando) {
+        while (SDL_PollEvent(&evento)) {
+            if (evento.type == SDL_QUIT) {
+                rodando = false;
+            } else if (evento.type == SDL_MOUSEBUTTONDOWN && menuAtivo) {
+                int mouseX = evento.button.x;
+                int mouseY = evento.button.y;
+
+                if (mouseX >= LARGURA_TELA / 2 - 100 && mouseX <= LARGURA_TELA / 2 + 100 && 
+                    mouseY >= ALTURA_TELA / 2 - 60 && mouseY <= ALTURA_TELA / 2 - 10) {
+                    // Iniciar Jogo
+                    menuAtivo = false;
+                    loopJogo(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
+                } else if (mouseX >= LARGURA_TELA / 2 - 50 && mouseX <= LARGURA_TELA / 2 + 50 && 
+                           mouseY >= ALTURA_TELA / 2 + 20 && mouseY <= ALTURA_TELA / 2 + 70) {
+                    // Sair
+                    rodando = false;
+                }
+            }
+        }
+
+        if (menuAtivo) {
+            desenharMenu();
+        }
+    }
+}
+
 void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
     bool rodando = true;
     SDL_Event evento;
 
     int canhaoX = LARGURA_TELA / 2;
     int canhaoY = ALTURA_TELA - 50;
+    Uint32 tempoUltimoTiro = 0;  // Variável para controlar o tempo do último tiro
 
-    Uint32 tempoUltimoTiro = 0;
-
-    while (rodando) {
+     while (rodando) {
+        // Processa eventos
         while (SDL_PollEvent(&evento)) {
             if (evento.type == SDL_QUIT) {
                 rodando = false;
             } else if (evento.type == SDL_MOUSEBUTTONDOWN && evento.button.button == SDL_BUTTON_LEFT) {
                 Uint32 tempoAtual = SDL_GetTicks();
-                if (tempoAtual - tempoUltimoTiro >= DELAY_TIRO) {
+                if (tempoAtual - tempoUltimoTiro >= DELAY_TIRO) {  // Verifica se passou 1 segundo desde o último tiro
                     int mouseX, mouseY;
                     SDL_GetMouseState(&mouseX, &mouseY);
                     tiros(canhaoX, canhaoY, mouseX, mouseY);
-                    tempoUltimoTiro = tempoAtual;
+                    tempoUltimoTiro = tempoAtual;  // Atualiza o tempo do último tiro
                 }
             }
         }
 
-        if (rand() % 150 == 0) {
+        // Aumentar a frequência de aparição dos lixos
+        if (rand() % 50 == 0) {  // Reduz o valor para aumentar a frequência
             adicionarLixos(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
         }
 
+        // Limpa tela
         SDL_RenderClear(renderizador);
 
+        // Desenha e atualiza a cena
         desenharCena();
         atualizarEDesenharLixos();
         atualizarEDesenharTiros();
 
+        // Apresenta a nova cena
         SDL_RenderPresent(renderizador);
-        SDL_Delay(16);
+
+        SDL_Delay(16);  // Aproximadamente 60 FPS
     }
 }
 
+// Liberação de recursos e encerramento da aplicação
 void fecharSDL(SDL_Texture **texturasLixo, int numTexturas) {
     while (listaLixos != NULL) {
         Lixo *temp = listaLixos;
@@ -395,7 +463,6 @@ int main(int argc, char *argv[]) {
 
     const int numEmojis = 9;
     SDL_Texture *texturasLixo[numEmojis];
-    //🥤", "🧃", "📦", "👟", "👕", "🎒", "🛞", "🪑", "🚽"
     int probabilidades[] = {23, 23, 12, 10, 10, 10, 5, 5, 2}; 
     int totalProbabilidades = 0;
     for (int i = 0; i < numEmojis; i++) {
@@ -407,7 +474,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    loopJogo(texturasLixo, probabilidades, numEmojis, totalProbabilidades);
+    loopMenu(texturasLixo, probabilidades, numEmojis, totalProbabilidades);
     fecharSDL(texturasLixo, numEmojis);
     return 0;
 }
