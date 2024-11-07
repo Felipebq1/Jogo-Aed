@@ -13,6 +13,13 @@
 #define VELOCIDADE_LIXO 1
 #define VELOCIDADE_TIRO 5
 #define DELAY_TIRO 1000  // Delay de 1 segundo em milissegundos
+#define VIDA_MAXIMA 100
+
+// Definir danos por tipo de lixo
+#define DANO_BAIXO 5    // 🥤, 🧃
+#define DANO_MEDIO 10   // 📦, 👟, 👕, 🎒
+#define DANO_ALTO 15    // 🛞, 🪑
+#define DANO_MUITO_ALTO 20 // 🚽
 
 // Definir cores
 SDL_Color corRio = {0, 153, 153, 255};  // Cor do rio entre azul e verde (ciano)
@@ -25,10 +32,13 @@ SDL_Renderer *renderizador = NULL;
 SDL_Texture *texturaCanhao = NULL;
 SDL_Texture *texturaTiro = NULL;
 
+int vidaAtual = VIDA_MAXIMA;
+
 typedef struct Lixo {
     int x, y;
     int largura, altura;
     SDL_Texture *textura;
+    int dano;  // Dano que este tipo de lixo causa
     struct Lixo *proximo;
 } Lixo;
 
@@ -45,7 +55,20 @@ Tiro *listaTiros = NULL;
 // Declaração antecipada da função loopJogo
 void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades);
 
-// Função para carregar uma textura de emoji
+SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *emoji);
+void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTexturas, int totalProbabilidades);
+void tiros(float inicioX, float inicioY, float destinoX, float destinoY);
+void atualizarEDesenharLixos();
+bool verificarColisao(SDL_Rect a, SDL_Rect b);
+void atualizarEDesenharTiros();
+bool inicializarSDL();
+bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas);
+void desenharCena();
+void desenharBarraDeVida();
+void desenharMenu();
+void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades);
+void fecharSDL(SDL_Texture **texturasLixo, int numTexturas);
+
 SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *emoji) {
     SDL_Color branco = {255, 255, 255, 255};
     SDL_Surface *surface = TTF_RenderUTF8_Blended(font, emoji, branco);
@@ -54,7 +77,6 @@ SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *e
     return textura;
 }
 
-// Função para adicionar lixo à lista
 void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTexturas, int totalProbabilidades) {
     int x = (LARGURA_TELA / 6) + rand() % (LARGURA_TELA * 2 / 3);
     int sorteio = rand() % totalProbabilidades;
@@ -74,26 +96,37 @@ void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTextura
     novoLixo->y = 0;
     novoLixo->textura = texturas[index];
 
-    // Ajustar tamanhos para emojis específicos
+    // Ajustar tamanhos para emojis específicos e definir dano
+    // 🥤, 🧃, 📦, 👟, 👕, 🎒, 🛞, 🪑, 🚽
     if (index == 2 || index == 6 || index == 7 || index == 8) {  // 📦, 🛞, 🪑, 🚽
         novoLixo->largura = LARGURA_LIXO * 2;
         novoLixo->altura = ALTURA_LIXO * 2;
-    } else if(index == 4 || index == 5) {
+    } else if(index == 4 || index == 5) { // 👕, 🎒
         novoLixo->largura = LARGURA_LIXO * 1.5;
         novoLixo->altura = ALTURA_LIXO * 1.5;
-    } else if(index == 3) {
+    } else if(index == 3) { // 👟
         novoLixo->largura = LARGURA_LIXO * 1.2;
         novoLixo->altura = ALTURA_LIXO * 1.2;
-    } else {
+    } else {   // 🥤, 🧃
         novoLixo->largura = LARGURA_LIXO;
         novoLixo->altura = ALTURA_LIXO;
+    }
+
+    // Definir dano com base no tipo de lixo
+    if (index == 0 || index == 1) {  // 🥤, 🧃
+        novoLixo->dano = DANO_BAIXO;
+    } else if (index == 2 || index == 3 || index == 4 || index == 5) {  // 📦, 👟, 👕, 🎒
+        novoLixo->dano = DANO_MEDIO;
+    } else if (index == 6 || index == 7) {  // 🛞, 🪑
+        novoLixo->dano = DANO_ALTO;
+    } else if (index == 8) {  // 🚽
+        novoLixo->dano = DANO_MUITO_ALTO;
     }
 
     novoLixo->proximo = listaLixos;
     listaLixos = novoLixo;
 }
 
-// Função para adicionar tiro à lista
 void tiros(float inicioX, float inicioY, float destinoX, float destinoY) {
     Tiro *novoTiro = (Tiro *)malloc(sizeof(Tiro));
     novoTiro->x = inicioX;
@@ -126,6 +159,12 @@ void atualizarEDesenharLixos() {
         SDL_RenderCopy(renderizador, atual->textura, NULL, &retanguloLixo);
 
         if (atual->y > ALTURA_TELA) {
+            // Reduz a vida de acordo com o dano do lixo
+            vidaAtual -= atual->dano;
+            if (vidaAtual < 0) {
+                vidaAtual = 0;
+            }
+
             if (anterior == NULL) {
                 listaLixos = atual->proximo;
                 free(atual);
@@ -323,6 +362,22 @@ void desenharCena() {
     SDL_RenderCopy(renderizador, texturaCanhao, NULL, &retanguloCano);
 }
 
+void desenharBarraDeVida() {
+    int larguraBarra = 200; // Largura inicial da barra
+    int alturaBarra = 20;   // Altura da barra
+    int xPos = 10;          // Posição X da barra
+    int yPos = 10;          // Posição Y da barra
+
+    int larguraAtual = (vidaAtual * larguraBarra) / VIDA_MAXIMA;
+
+    SDL_SetRenderDrawColor(renderizador, 255, 0, 0, 255); // Vermelho
+    SDL_Rect barraVida = {xPos, yPos, larguraAtual, alturaBarra};
+    SDL_RenderFillRect(renderizador, &barraVida);
+
+    SDL_SetRenderDrawColor(renderizador, 128, 128, 128, 255); // Cinza
+    SDL_Rect barraVazia = {xPos + larguraAtual, yPos, larguraBarra - larguraAtual, alturaBarra};
+    SDL_RenderFillRect(renderizador, &barraVazia);
+}
 void desenharMenu() {
     SDL_SetRenderDrawColor(renderizador, 0, 0, 0, 255);  // Preto para o fundo do menu
     SDL_RenderClear(renderizador);
@@ -390,7 +445,7 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
     int canhaoY = ALTURA_TELA - 50;
     Uint32 tempoUltimoTiro = 0;  // Variável para controlar o tempo do último tiro
 
-     while (rodando) {
+    while (rodando) {
         // Processa eventos
         while (SDL_PollEvent(&evento)) {
             if (evento.type == SDL_QUIT) {
@@ -416,8 +471,15 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
 
         // Desenha e atualiza a cena
         desenharCena();
+        desenharBarraDeVida(); // Desenha a barra de vida
         atualizarEDesenharLixos();
         atualizarEDesenharTiros();
+
+        // Verifica se a vida chegou a zero
+        if (vidaAtual <= 0) {
+            SDL_Log("Fim de jogo! O mar foi poluído demais.");
+            rodando = false;
+        }
 
         // Apresenta a nova cena
         SDL_RenderPresent(renderizador);
@@ -426,7 +488,6 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
     }
 }
 
-// Liberação de recursos e encerramento da aplicação
 void fecharSDL(SDL_Texture **texturasLixo, int numTexturas) {
     while (listaLixos != NULL) {
         Lixo *temp = listaLixos;
@@ -463,6 +524,7 @@ int main(int argc, char *argv[]) {
 
     const int numEmojis = 9;
     SDL_Texture *texturasLixo[numEmojis];
+    ///                    🥤, 🧃, 📦, 👟, 👕, 🎒, 🛞, 🪑, 🚽
     int probabilidades[] = {23, 23, 12, 10, 10, 10, 5, 5, 2}; 
     int totalProbabilidades = 0;
     for (int i = 0; i < numEmojis; i++) {
