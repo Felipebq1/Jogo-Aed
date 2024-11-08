@@ -13,7 +13,7 @@
 #define ALTURA_LIXO 20
 #define VELOCIDADE_LIXO 1
 #define VELOCIDADE_TIRO 5
-#define DELAY_TIRO 1000  // Delay de 1 segundo em milissegundos
+#define DELAY_TIRO 900  
 #define VIDA_MAXIMA 100
 #define MAX_PONTUACOES 100
 
@@ -36,7 +36,7 @@ SDL_Texture *texturaTiro = NULL;
 TTF_Font *fontePontuacao = NULL;
 
 int vidaAtual = VIDA_MAXIMA;
-int lixosDestruidos = 0;
+Uint32 tempoInicioJogo;
 
 // Declaração antecipada das estruturas e funções necessárias
 typedef struct Lixo {
@@ -57,7 +57,6 @@ typedef struct Tiro {
 Lixo *listaLixos = NULL;
 Tiro *listaTiros = NULL;
 
-// Declaração antecipada das funções necessárias
 void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades);
 SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *emoji);
 void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTexturas, int totalProbabilidades);
@@ -69,18 +68,20 @@ bool inicializarSDL();
 bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas);
 void desenharCena();
 void desenharBarraDeVida();
-void desenharMenu(int recorde);
-void desenharPontuacao();
+void desenharMenu(Uint32 recorde);
+void desenharTempoJogo(Uint32 duracaoJogo);
 void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades);
 void fecharSDL(SDL_Texture **texturasLixo, int numTexturas);
-void salvarPontuacao(int novaPontuacao);
-int lerRecorde();
+void salvarPontuacao(Uint32 duracaoJogo);
+Uint32 lerRecorde();
 
-// Função para desenhar a pontuação de lixos destruídos
-void desenharPontuacao() {
+// Função para desenhar o tempo de jogo atual
+void desenharTempoJogo(Uint32 duracaoJogo) {
     SDL_Color branco = {255, 255, 255, 255};
     char texto[50];
-    snprintf(texto, sizeof(texto), "Lixos Destruidos: %d", lixosDestruidos);
+    Uint32 minutos = duracaoJogo / 60000; // 60000 ms por minuto
+    Uint32 segundos = (duracaoJogo % 60000) / 1000;
+    snprintf(texto, sizeof(texto), "Tempo: %02u:%02u", minutos, segundos);
 
     SDL_Surface *surfaceTexto = TTF_RenderText_Blended(fontePontuacao, texto, branco);
     SDL_Texture *texturaTexto = SDL_CreateTextureFromSurface(renderizador, surfaceTexto);
@@ -92,27 +93,28 @@ void desenharPontuacao() {
     SDL_DestroyTexture(texturaTexto);
 }
 
-// Função para salvar a pontuação no arquivo e ordenar
-void salvarPontuacao(int novaPontuacao) {
-    int pontuacoes[MAX_PONTUACOES];
+// Função para salvar a duração do jogo no arquivo e ordenar
+void salvarPontuacao(Uint32 duracaoJogo) {
+    Uint32 pontuacoes[MAX_PONTUACOES];
     int numPontuacoes = 0;
 
     FILE *arquivo = fopen("pontuacoes.txt", "r");
     if (arquivo) {
-        while (fscanf(arquivo, "%d", &pontuacoes[numPontuacoes]) != EOF && numPontuacoes < MAX_PONTUACOES) {
+        while (fscanf(arquivo, "%u", &pontuacoes[numPontuacoes]) != EOF && numPontuacoes < MAX_PONTUACOES) {
             numPontuacoes++;
         }
         fclose(arquivo);
     }
 
     if (numPontuacoes < MAX_PONTUACOES) {
-        pontuacoes[numPontuacoes++] = novaPontuacao;
+        pontuacoes[numPontuacoes++] = duracaoJogo;
     }
 
+    // Ordena as pontuações em ordem decrescente
     for (int i = 0; i < numPontuacoes - 1; i++) {
         for (int j = 0; j < numPontuacoes - i - 1; j++) {
             if (pontuacoes[j] < pontuacoes[j + 1]) {
-                int temp = pontuacoes[j];
+                Uint32 temp = pontuacoes[j];
                 pontuacoes[j] = pontuacoes[j + 1];
                 pontuacoes[j + 1] = temp;
             }
@@ -122,57 +124,107 @@ void salvarPontuacao(int novaPontuacao) {
     arquivo = fopen("pontuacoes.txt", "w");
     if (arquivo) {
         for (int i = 0; i < numPontuacoes; i++) {
-            fprintf(arquivo, "%d\n", pontuacoes[i]);
+            fprintf(arquivo, "%u\n", pontuacoes[i]);
         }
         fclose(arquivo);
     }
 }
 
 // Função para ler o recorde do arquivo
-int lerRecorde() {
-    int recorde = 0;
+Uint32 lerRecorde() {
+    Uint32 recorde = 0;
     FILE *arquivo = fopen("pontuacoes.txt", "r");
     if (arquivo) {
-        fscanf(arquivo, "%d", &recorde);
+        fscanf(arquivo, "%u", &recorde);
         fclose(arquivo);
     }
     return recorde;
 }
 
-void desenharMenu(int recorde) {
-    SDL_SetRenderDrawColor(renderizador, 0, 0, 0, 255);
+void desenharMenu(Uint32 recorde) {
+    // Defina a cor de fundo para verde escuro
+    SDL_SetRenderDrawColor(renderizador, 0, 100, 0, 255);  // Verde escuro
     SDL_RenderClear(renderizador);
 
-    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 48);
+    // Carregar a fonte para o título e botões
+    TTF_Font *fonteTitulo = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 64);
+    TTF_Font *fonteBotoes = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 48);
     SDL_Color branco = {255, 255, 255, 255};
 
-    SDL_Surface *textoIniciarSurface = TTF_RenderUTF8_Blended(font, "Iniciar Jogo", branco);
-    SDL_Texture *textoIniciar = SDL_CreateTextureFromSurface(renderizador, textoIniciarSurface);
-    SDL_Surface *textoSairSurface = TTF_RenderUTF8_Blended(font, "Sair", branco);
-    SDL_Texture *textoSair = SDL_CreateTextureFromSurface(renderizador, textoSairSurface);
+    // Renderizar o texto do título
+    SDL_Surface *tituloSurface = TTF_RenderUTF8_Blended(fonteTitulo, "Nome do Jogo", branco);
+    SDL_Texture *tituloTexto = SDL_CreateTextureFromSurface(renderizador, tituloSurface);
 
+    // Calcular a posição do título para centralizá-lo
+    SDL_Rect rectTitulo;
+    rectTitulo.x = (LARGURA_TELA - tituloSurface->w) / 2;
+    rectTitulo.y = 20;  // Posicionado na parte superior centralizada
+    rectTitulo.w = tituloSurface->w;
+    rectTitulo.h = tituloSurface->h;
+    SDL_RenderCopy(renderizador, tituloTexto, NULL, &rectTitulo);
+
+    // Define cor e posição para o botão "Iniciar"
+    SDL_Rect botaoIniciar = {LARGURA_TELA / 2 - 220, ALTURA_TELA / 2 - 25, 200, 50};
+    SDL_SetRenderDrawColor(renderizador, 57, 255, 20, 255);  // Verde neon
+    SDL_RenderFillRect(renderizador, &botaoIniciar);
+
+    // Renderizar o texto "Iniciar" no botão
+    SDL_Surface *textoIniciarSurface = TTF_RenderUTF8_Blended(fonteBotoes, "Iniciar", branco);
+    SDL_Texture *textoIniciar = SDL_CreateTextureFromSurface(renderizador, textoIniciarSurface);
+    SDL_Rect rectIniciar;
+    rectIniciar.x = botaoIniciar.x + (botaoIniciar.w - textoIniciarSurface->w) / 2;
+    rectIniciar.y = botaoIniciar.y + (botaoIniciar.h - textoIniciarSurface->h) / 2;
+    rectIniciar.w = textoIniciarSurface->w;
+    rectIniciar.h = textoIniciarSurface->h;
+    SDL_RenderCopy(renderizador, textoIniciar, NULL, &rectIniciar);
+
+    // Define cor e posição para o botão "Sair"
+    SDL_Rect botaoSair = {LARGURA_TELA / 2 + 20, ALTURA_TELA / 2 - 25, 200, 50};
+    SDL_SetRenderDrawColor(renderizador, 255, 0, 0, 255);  // Vermelho
+    SDL_RenderFillRect(renderizador, &botaoSair);
+
+    // Renderizar o texto "Sair" no botão
+    SDL_Surface *textoSairSurface = TTF_RenderUTF8_Blended(fonteBotoes, "Sair", branco);
+    SDL_Texture *textoSair = SDL_CreateTextureFromSurface(renderizador, textoSairSurface);
+    SDL_Rect rectSair;
+    rectSair.x = botaoSair.x + (botaoSair.w - textoSairSurface->w) / 2;
+    rectSair.y = botaoSair.y + (botaoSair.h - textoSairSurface->h) / 2;
+    rectSair.w = textoSairSurface->w;
+    rectSair.h = textoSairSurface->h;
+    SDL_RenderCopy(renderizador, textoSair, NULL, &rectSair);
+
+    // Renderizar o recorde
     char recordeTexto[50];
-    snprintf(recordeTexto, sizeof(recordeTexto), "Recorde: %d", recorde);
-    SDL_Surface *textoRecordeSurface = TTF_RenderText_Blended(font, recordeTexto, branco);
+    Uint32 minutos = recorde / 60000; // 60000 ms por minuto
+    Uint32 segundos = (recorde % 60000) / 1000;
+    snprintf(recordeTexto, sizeof(recordeTexto), "Recorde: %02u:%02u", minutos, segundos);
+
+    SDL_Surface *textoRecordeSurface = TTF_RenderText_Blended(fonteBotoes, recordeTexto, branco);
     SDL_Texture *textoRecorde = SDL_CreateTextureFromSurface(renderizador, textoRecordeSurface);
 
-    SDL_Rect rectIniciar = {LARGURA_TELA / 2 - 100, ALTURA_TELA / 2 - 60, 200, 50};
-    SDL_Rect rectSair = {LARGURA_TELA / 2 - 50, ALTURA_TELA / 2 + 20, 100, 50};
-    SDL_Rect rectRecorde = {LARGURA_TELA / 2 - 100, ALTURA_TELA / 2 - 120, 200, 50};
+    // Calcular posição do recorde para centralizá-lo na parte inferior
+    SDL_Rect rectRecorde;
+    rectRecorde.x = (LARGURA_TELA - textoRecordeSurface->w) / 2;
+    rectRecorde.y = ALTURA_TELA - 60;  // Deixando um pouco de margem do final da tela
+    rectRecorde.w = textoRecordeSurface->w;
+    rectRecorde.h = textoRecordeSurface->h;
 
-    SDL_RenderCopy(renderizador, textoIniciar, NULL, &rectIniciar);
-    SDL_RenderCopy(renderizador, textoSair, NULL, &rectSair);
     SDL_RenderCopy(renderizador, textoRecorde, NULL, &rectRecorde);
 
+    // Apresentar todas as mudanças feitas no renderizador
     SDL_RenderPresent(renderizador);
 
+    // Liberar superfícies e texturas
+    SDL_FreeSurface(tituloSurface);
+    SDL_DestroyTexture(tituloTexto);
     SDL_FreeSurface(textoIniciarSurface);
-    SDL_FreeSurface(textoSairSurface);
-    SDL_FreeSurface(textoRecordeSurface);
     SDL_DestroyTexture(textoIniciar);
+    SDL_FreeSurface(textoSairSurface);
     SDL_DestroyTexture(textoSair);
+    SDL_FreeSurface(textoRecordeSurface);
     SDL_DestroyTexture(textoRecorde);
-    TTF_CloseFont(font);
+    TTF_CloseFont(fonteTitulo);
+    TTF_CloseFont(fonteBotoes);
 }
 
 void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
@@ -180,7 +232,7 @@ void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
     bool menuAtivo = true;
     SDL_Event evento;
 
-    int recorde = lerRecorde();
+    Uint32 recorde = lerRecorde();
 
     while (rodando) {
         while (SDL_PollEvent(&evento)) {
@@ -190,13 +242,21 @@ void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
                 int mouseX = evento.button.x;
                 int mouseY = evento.button.y;
 
-                if (mouseX >= LARGURA_TELA / 2 - 100 && mouseX <= LARGURA_TELA / 2 + 100 && 
-                    mouseY >= ALTURA_TELA / 2 - 60 && mouseY <= ALTURA_TELA / 2 - 10) {
+                // Definir o retângulo do botão "Iniciar" novamente
+                SDL_Rect botaoIniciar = {LARGURA_TELA / 2 - 220, ALTURA_TELA / 2 - 25, 200, 50};
+                // Definir o retângulo do botão "Sair" novamente
+                SDL_Rect botaoSair = {LARGURA_TELA / 2 + 20, ALTURA_TELA / 2 - 25, 200, 50};
+
+                // Verificar cliques no botão "Iniciar"
+                if (mouseX >= botaoIniciar.x && mouseX <= botaoIniciar.x + botaoIniciar.w &&
+                    mouseY >= botaoIniciar.y && mouseY <= botaoIniciar.y + botaoIniciar.h) {
                     // Iniciar Jogo
                     menuAtivo = false;
                     loopJogo(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
-                } else if (mouseX >= LARGURA_TELA / 2 - 50 && mouseX <= LARGURA_TELA / 2 + 50 && 
-                           mouseY >= ALTURA_TELA / 2 + 20 && mouseY <= ALTURA_TELA / 2 + 70) {
+                } 
+                // Verificar cliques no botão "Sair"
+                else if (mouseX >= botaoSair.x && mouseX <= botaoSair.x + botaoSair.w &&
+                         mouseY >= botaoSair.y && mouseY <= botaoSair.y + botaoSair.h) {
                     // Sair
                     rodando = false;
                 }
@@ -216,6 +276,7 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
     int canhaoX = LARGURA_TELA / 2;
     int canhaoY = ALTURA_TELA - 50;
     Uint32 tempoUltimoTiro = 0;  // Variável para controlar o tempo do último tiro
+    tempoInicioJogo = SDL_GetTicks(); // Captura o tempo de início do jogo
 
     while (rodando) {
         while (SDL_PollEvent(&evento)) {
@@ -242,11 +303,13 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
         desenharBarraDeVida();
         atualizarEDesenharLixos();
         atualizarEDesenharTiros();
-        desenharPontuacao();
+        desenharTempoJogo(SDL_GetTicks() - tempoInicioJogo); // Desenhar o tempo de jogo atual
 
         if (vidaAtual <= 0) {
+            Uint32 tempoTerminoJogo = SDL_GetTicks(); // Tempo quando o jogo termina
+            Uint32 duracaoJogo = tempoTerminoJogo - tempoInicioJogo; // Calcula a duração do jogo em milissegundos
             SDL_Log("Fim de jogo! O mar foi poluído demais.");
-            salvarPontuacao(lixosDestruidos);
+            salvarPontuacao(duracaoJogo); // Salva a duração do jogo
             rodando = false;
         }
 
@@ -326,7 +389,7 @@ bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas) {
     }
 
     // Inicializa a fonte para pontuação
-    fontePontuacao = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 24);
+    fontePontuacao = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 15);
     if (!fontePontuacao) {
         SDL_Log("Erro ao carregar fonte de pontuação: %s", TTF_GetError());
         return false;
@@ -373,9 +436,13 @@ SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *e
 }
 
 void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTexturas, int totalProbabilidades) {
-    int x = (LARGURA_TELA / 6) + rand() % (LARGURA_TELA * 2 / 3);
-    int sorteio = rand() % totalProbabilidades;
+    int larguraMargem = LARGURA_TELA / 6;
+    int larguraRio = LARGURA_TELA - 2 * larguraMargem;
 
+    // Gera a posição X do lixo para estar apenas dentro do rio
+    int x = larguraMargem + rand() % (larguraRio - LARGURA_LIXO);
+
+    int sorteio = rand() % totalProbabilidades;
     int acumulador = 0;
     int index = 0;
     for (int i = 0; i < numTexturas; i++) {
@@ -405,7 +472,7 @@ void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTextura
         novoLixo->altura = ALTURA_LIXO;
     }
 
-        // Definir dano com base no tipo de lixo
+    // Definir dano com base no tipo de lixo
     if (index == 0 || index == 1) {  // 🥤, 🧃
         novoLixo->dano = DANO_BAIXO;
     } else if (index == 2 || index == 3 || index == 4 || index == 5) {  // 📦, 👟, 👕, 🎒
@@ -496,7 +563,6 @@ void atualizarEDesenharTiros() {
             SDL_Rect retanguloLixo = {lixoAtual->x, lixoAtual->y, lixoAtual->largura, lixoAtual->altura};
 
             if (verificarColisao(retanguloTiro, retanguloLixo)) {
-                lixosDestruidos++;  // Incrementa o contador de lixos destruídos
                 if (lixoAnterior == NULL) {
                     listaLixos = lixoAtual->proximo;
                     free(lixoAtual);
