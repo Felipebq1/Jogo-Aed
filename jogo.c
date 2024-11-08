@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <stdio.h>
 
 #define LARGURA_TELA 800
 #define ALTURA_TELA 600
@@ -14,6 +15,7 @@
 #define VELOCIDADE_TIRO 5
 #define DELAY_TIRO 1000  // Delay de 1 segundo em milissegundos
 #define VIDA_MAXIMA 100
+#define MAX_PONTUACOES 100
 
 // Definir danos por tipo de lixo
 #define DANO_BAIXO 5    // 🥤, 🧃
@@ -31,9 +33,12 @@ SDL_Window *tela = NULL;
 SDL_Renderer *renderizador = NULL;
 SDL_Texture *texturaCanhao = NULL;
 SDL_Texture *texturaTiro = NULL;
+TTF_Font *fontePontuacao = NULL;
 
 int vidaAtual = VIDA_MAXIMA;
+int lixosDestruidos = 0;
 
+// Declaração antecipada das estruturas e funções necessárias
 typedef struct Lixo {
     int x, y;
     int largura, altura;
@@ -52,9 +57,8 @@ typedef struct Tiro {
 Lixo *listaLixos = NULL;
 Tiro *listaTiros = NULL;
 
-// Declaração antecipada da função loopJogo
+// Declaração antecipada das funções necessárias
 void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades);
-
 SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *emoji);
 void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTexturas, int totalProbabilidades);
 void tiros(float inicioX, float inicioY, float destinoX, float destinoY);
@@ -65,9 +69,300 @@ bool inicializarSDL();
 bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas);
 void desenharCena();
 void desenharBarraDeVida();
-void desenharMenu();
+void desenharMenu(int recorde);
+void desenharPontuacao();
 void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades);
 void fecharSDL(SDL_Texture **texturasLixo, int numTexturas);
+void salvarPontuacao(int novaPontuacao);
+int lerRecorde();
+
+// Função para desenhar a pontuação de lixos destruídos
+void desenharPontuacao() {
+    SDL_Color branco = {255, 255, 255, 255};
+    char texto[50];
+    snprintf(texto, sizeof(texto), "Lixos Destruidos: %d", lixosDestruidos);
+
+    SDL_Surface *surfaceTexto = TTF_RenderText_Blended(fontePontuacao, texto, branco);
+    SDL_Texture *texturaTexto = SDL_CreateTextureFromSurface(renderizador, surfaceTexto);
+
+    SDL_Rect posicaoTexto = {10, ALTURA_TELA - 40, surfaceTexto->w, surfaceTexto->h};
+    SDL_RenderCopy(renderizador, texturaTexto, NULL, &posicaoTexto);
+
+    SDL_FreeSurface(surfaceTexto);
+    SDL_DestroyTexture(texturaTexto);
+}
+
+// Função para salvar a pontuação no arquivo e ordenar
+void salvarPontuacao(int novaPontuacao) {
+    int pontuacoes[MAX_PONTUACOES];
+    int numPontuacoes = 0;
+
+    FILE *arquivo = fopen("pontuacoes.txt", "r");
+    if (arquivo) {
+        while (fscanf(arquivo, "%d", &pontuacoes[numPontuacoes]) != EOF && numPontuacoes < MAX_PONTUACOES) {
+            numPontuacoes++;
+        }
+        fclose(arquivo);
+    }
+
+    if (numPontuacoes < MAX_PONTUACOES) {
+        pontuacoes[numPontuacoes++] = novaPontuacao;
+    }
+
+    for (int i = 0; i < numPontuacoes - 1; i++) {
+        for (int j = 0; j < numPontuacoes - i - 1; j++) {
+            if (pontuacoes[j] < pontuacoes[j + 1]) {
+                int temp = pontuacoes[j];
+                pontuacoes[j] = pontuacoes[j + 1];
+                pontuacoes[j + 1] = temp;
+            }
+        }
+    }
+
+    arquivo = fopen("pontuacoes.txt", "w");
+    if (arquivo) {
+        for (int i = 0; i < numPontuacoes; i++) {
+            fprintf(arquivo, "%d\n", pontuacoes[i]);
+        }
+        fclose(arquivo);
+    }
+}
+
+// Função para ler o recorde do arquivo
+int lerRecorde() {
+    int recorde = 0;
+    FILE *arquivo = fopen("pontuacoes.txt", "r");
+    if (arquivo) {
+        fscanf(arquivo, "%d", &recorde);
+        fclose(arquivo);
+    }
+    return recorde;
+}
+
+void desenharMenu(int recorde) {
+    SDL_SetRenderDrawColor(renderizador, 0, 0, 0, 255);
+    SDL_RenderClear(renderizador);
+
+    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 48);
+    SDL_Color branco = {255, 255, 255, 255};
+
+    SDL_Surface *textoIniciarSurface = TTF_RenderUTF8_Blended(font, "Iniciar Jogo", branco);
+    SDL_Texture *textoIniciar = SDL_CreateTextureFromSurface(renderizador, textoIniciarSurface);
+    SDL_Surface *textoSairSurface = TTF_RenderUTF8_Blended(font, "Sair", branco);
+    SDL_Texture *textoSair = SDL_CreateTextureFromSurface(renderizador, textoSairSurface);
+
+    char recordeTexto[50];
+    snprintf(recordeTexto, sizeof(recordeTexto), "Recorde: %d", recorde);
+    SDL_Surface *textoRecordeSurface = TTF_RenderText_Blended(font, recordeTexto, branco);
+    SDL_Texture *textoRecorde = SDL_CreateTextureFromSurface(renderizador, textoRecordeSurface);
+
+    SDL_Rect rectIniciar = {LARGURA_TELA / 2 - 100, ALTURA_TELA / 2 - 60, 200, 50};
+    SDL_Rect rectSair = {LARGURA_TELA / 2 - 50, ALTURA_TELA / 2 + 20, 100, 50};
+    SDL_Rect rectRecorde = {LARGURA_TELA / 2 - 100, ALTURA_TELA / 2 - 120, 200, 50};
+
+    SDL_RenderCopy(renderizador, textoIniciar, NULL, &rectIniciar);
+    SDL_RenderCopy(renderizador, textoSair, NULL, &rectSair);
+    SDL_RenderCopy(renderizador, textoRecorde, NULL, &rectRecorde);
+
+    SDL_RenderPresent(renderizador);
+
+    SDL_FreeSurface(textoIniciarSurface);
+    SDL_FreeSurface(textoSairSurface);
+    SDL_FreeSurface(textoRecordeSurface);
+    SDL_DestroyTexture(textoIniciar);
+    SDL_DestroyTexture(textoSair);
+    SDL_DestroyTexture(textoRecorde);
+    TTF_CloseFont(font);
+}
+
+void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
+    bool rodando = true;
+    bool menuAtivo = true;
+    SDL_Event evento;
+
+    int recorde = lerRecorde();
+
+    while (rodando) {
+        while (SDL_PollEvent(&evento)) {
+            if (evento.type == SDL_QUIT) {
+                rodando = false;
+            } else if (evento.type == SDL_MOUSEBUTTONDOWN && menuAtivo) {
+                int mouseX = evento.button.x;
+                int mouseY = evento.button.y;
+
+                if (mouseX >= LARGURA_TELA / 2 - 100 && mouseX <= LARGURA_TELA / 2 + 100 && 
+                    mouseY >= ALTURA_TELA / 2 - 60 && mouseY <= ALTURA_TELA / 2 - 10) {
+                    // Iniciar Jogo
+                    menuAtivo = false;
+                    loopJogo(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
+                } else if (mouseX >= LARGURA_TELA / 2 - 50 && mouseX <= LARGURA_TELA / 2 + 50 && 
+                           mouseY >= ALTURA_TELA / 2 + 20 && mouseY <= ALTURA_TELA / 2 + 70) {
+                    // Sair
+                    rodando = false;
+                }
+            }
+        }
+
+        if (menuAtivo) {
+            desenharMenu(recorde);
+        }
+    }
+}
+
+void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
+    bool rodando = true;
+    SDL_Event evento;
+
+    int canhaoX = LARGURA_TELA / 2;
+    int canhaoY = ALTURA_TELA - 50;
+    Uint32 tempoUltimoTiro = 0;  // Variável para controlar o tempo do último tiro
+
+    while (rodando) {
+        while (SDL_PollEvent(&evento)) {
+            if (evento.type == SDL_QUIT) {
+                rodando = false;
+            } else if (evento.type == SDL_MOUSEBUTTONDOWN && evento.button.button == SDL_BUTTON_LEFT) {
+                Uint32 tempoAtual = SDL_GetTicks();
+                if (tempoAtual - tempoUltimoTiro >= DELAY_TIRO) {
+                    int mouseX, mouseY;
+                    SDL_GetMouseState(&mouseX, &mouseY);
+                    tiros(canhaoX, canhaoY, mouseX, mouseY);
+                    tempoUltimoTiro = tempoAtual;
+                }
+            }
+        }
+
+        if (rand() % 50 == 0) {
+            adicionarLixos(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
+        }
+
+        SDL_RenderClear(renderizador);
+
+        desenharCena();
+        desenharBarraDeVida();
+        atualizarEDesenharLixos();
+        atualizarEDesenharTiros();
+        desenharPontuacao();
+
+        if (vidaAtual <= 0) {
+            SDL_Log("Fim de jogo! O mar foi poluído demais.");
+            salvarPontuacao(lixosDestruidos);
+            rodando = false;
+        }
+
+        SDL_RenderPresent(renderizador);
+        SDL_Delay(16);
+    }
+}
+
+bool inicializarSDL() {
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        SDL_Log("Erro ao inicializar SDL: %s", SDL_GetError());
+        return false;
+    }
+    
+    tela = SDL_CreateWindow("Rio com Ponte", 
+                              SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
+                              LARGURA_TELA, ALTURA_TELA, SDL_WINDOW_SHOWN);
+    if (!tela) {
+        SDL_Log("Erro ao criar tela: %s", SDL_GetError());
+        return false;
+    }
+    
+    renderizador = SDL_CreateRenderer(tela, -1, SDL_RENDERER_ACCELERATED);
+    if (!renderizador) {
+        SDL_Log("Erro ao criar renderizador: %s", SDL_GetError());
+        return false;
+    }
+
+    if (TTF_Init() == -1) {
+        SDL_Log("Erro ao inicializar SDL_ttf: %s", TTF_GetError());
+        return false;
+    }
+
+    if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_WEBP) & (IMG_INIT_PNG | IMG_INIT_WEBP))) {
+        SDL_Log("Erro ao inicializar SDL_image: %s", IMG_GetError());
+        return false;
+    }
+    
+    return true;
+}
+
+bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas) {
+    SDL_Surface *surfaceCarregada = IMG_Load("imagens/cannon-isolated-on-transparent-free-png.webp");
+    if (!surfaceCarregada) {
+        SDL_Log("Erro ao carregar imagem do canhão: %s", IMG_GetError());
+        return false;
+    }
+
+    texturaCanhao = SDL_CreateTextureFromSurface(renderizador, surfaceCarregada);
+    SDL_FreeSurface(surfaceCarregada);
+    if (!texturaCanhao) {
+        SDL_Log("Erro ao criar textura do canhão: %s", SDL_GetError());
+        return false;
+    }
+
+    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 28); // Ajuste com uma fonte de emojis válida
+    if (!font) {
+        SDL_Log("Erro ao carregar fonte: %s", TTF_GetError());
+        return false;
+    }
+
+    texturaTiro = carregarEmoji(renderizador, font, "💣");
+    if (!texturaTiro) {
+        SDL_Log("Erro ao criar textura do tiro: %s", SDL_GetError());
+        TTF_CloseFont(font);
+        return false;
+    }
+
+    const char* emojis[] = {"🥤", "🧃", "📦", "👟", "👕", "🎒", "🛞", "🪑", "🚽"};
+    for (int i = 0; i < numTexturas; i++) {
+        texturasLixo[i] = carregarEmoji(renderizador, font, emojis[i]);
+        if (!texturasLixo[i]) {
+            SDL_Log("Erro ao criar textura do emoji de lixo: %s", SDL_GetError());
+            TTF_CloseFont(font);
+            return false;
+        }
+    }
+
+    // Inicializa a fonte para pontuação
+    fontePontuacao = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 24);
+    if (!fontePontuacao) {
+        SDL_Log("Erro ao carregar fonte de pontuação: %s", TTF_GetError());
+        return false;
+    }
+
+    TTF_CloseFont(font);
+    return true;
+}
+
+void fecharSDL(SDL_Texture **texturasLixo, int numTexturas) {
+    while (listaLixos != NULL) {
+        Lixo *temp = listaLixos;
+        listaLixos = listaLixos->proximo;
+        free(temp);
+    }
+
+    while (listaTiros != NULL) {
+        Tiro *temp = listaTiros;
+        listaTiros = listaTiros->proximo;
+        free(temp);
+    }
+
+    SDL_DestroyTexture(texturaCanhao);
+    SDL_DestroyTexture(texturaTiro);
+
+    for (int i = 0; i < numTexturas; i++) {
+        SDL_DestroyTexture(texturasLixo[i]);
+    }
+
+    TTF_CloseFont(fontePontuacao);
+    SDL_DestroyRenderer(renderizador);
+    SDL_DestroyWindow(tela);
+    IMG_Quit();
+    TTF_Quit();
+    SDL_Quit();
+}
 
 SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *emoji) {
     SDL_Color branco = {255, 255, 255, 255};
@@ -96,8 +391,6 @@ void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTextura
     novoLixo->y = 0;
     novoLixo->textura = texturas[index];
 
-    // Ajustar tamanhos para emojis específicos e definir dano
-    // 🥤, 🧃, 📦, 👟, 👕, 🎒, 🛞, 🪑, 🚽
     if (index == 2 || index == 6 || index == 7 || index == 8) {  // 📦, 🛞, 🪑, 🚽
         novoLixo->largura = LARGURA_LIXO * 2;
         novoLixo->altura = ALTURA_LIXO * 2;
@@ -112,7 +405,7 @@ void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTextura
         novoLixo->altura = ALTURA_LIXO;
     }
 
-    // Definir dano com base no tipo de lixo
+        // Definir dano com base no tipo de lixo
     if (index == 0 || index == 1) {  // 🥤, 🧃
         novoLixo->dano = DANO_BAIXO;
     } else if (index == 2 || index == 3 || index == 4 || index == 5) {  // 📦, 👟, 👕, 🎒
@@ -203,6 +496,7 @@ void atualizarEDesenharTiros() {
             SDL_Rect retanguloLixo = {lixoAtual->x, lixoAtual->y, lixoAtual->largura, lixoAtual->altura};
 
             if (verificarColisao(retanguloTiro, retanguloLixo)) {
+                lixosDestruidos++;  // Incrementa o contador de lixos destruídos
                 if (lixoAnterior == NULL) {
                     listaLixos = lixoAtual->proximo;
                     free(lixoAtual);
@@ -248,80 +542,6 @@ void atualizarEDesenharTiros() {
             }
         }
     }
-}
-
-bool inicializarSDL() {
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        SDL_Log("Erro ao inicializar SDL: %s", SDL_GetError());
-        return false;
-    }
-    
-    tela = SDL_CreateWindow("Rio com Ponte", 
-                              SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
-                              LARGURA_TELA, ALTURA_TELA, SDL_WINDOW_SHOWN);
-    if (!tela) {
-        SDL_Log("Erro ao criar tela: %s", SDL_GetError());
-        return false;
-    }
-    
-    renderizador = SDL_CreateRenderer(tela, -1, SDL_RENDERER_ACCELERATED);
-    if (!renderizador) {
-        SDL_Log("Erro ao criar renderizador: %s", SDL_GetError());
-        return false;
-    }
-
-    if (TTF_Init() == -1) {
-        SDL_Log("Erro ao inicializar SDL_ttf: %s", TTF_GetError());
-        return false;
-    }
-
-    if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_WEBP) & (IMG_INIT_PNG | IMG_INIT_WEBP))) {
-        SDL_Log("Erro ao inicializar SDL_image: %s", IMG_GetError());
-        return false;
-    }
-    
-    return true;
-}
-
-bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas) {
-    SDL_Surface *surfaceCarregada = IMG_Load("imagens/cannon-isolated-on-transparent-free-png.webp");
-    if (!surfaceCarregada) {
-        SDL_Log("Erro ao carregar imagem do canhão: %s", IMG_GetError());
-        return false;
-    }
-
-    texturaCanhao = SDL_CreateTextureFromSurface(renderizador, surfaceCarregada);
-    SDL_FreeSurface(surfaceCarregada);
-    if (!texturaCanhao) {
-        SDL_Log("Erro ao criar textura do canhão: %s", SDL_GetError());
-        return false;
-    }
-
-    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 28); // Ajuste com uma fonte de emojis válida
-    if (!font) {
-        SDL_Log("Erro ao carregar fonte: %s", TTF_GetError());
-        return false;
-    }
-
-    texturaTiro = carregarEmoji(renderizador, font, "💣");
-    if (!texturaTiro) {
-        SDL_Log("Erro ao criar textura do tiro: %s", SDL_GetError());
-        TTF_CloseFont(font);
-        return false;
-    }
-
-    const char* emojis[] = {"🥤", "🧃", "📦", "👟", "👕", "🎒", "🛞", "🪑", "🚽"};
-    for (int i = 0; i < numTexturas; i++) {
-        texturasLixo[i] = carregarEmoji(renderizador, font, emojis[i]);
-        if (!texturasLixo[i]) {
-            SDL_Log("Erro ao criar textura do emoji de lixo: %s", SDL_GetError());
-            TTF_CloseFont(font);
-            return false;
-        }
-    }
-
-    TTF_CloseFont(font);
-    return true;
 }
 
 void desenharCena() {
@@ -378,142 +598,6 @@ void desenharBarraDeVida() {
     SDL_Rect barraVazia = {xPos + larguraAtual, yPos, larguraBarra - larguraAtual, alturaBarra};
     SDL_RenderFillRect(renderizador, &barraVazia);
 }
-void desenharMenu() {
-    SDL_SetRenderDrawColor(renderizador, 0, 0, 0, 255);  // Preto para o fundo do menu
-    SDL_RenderClear(renderizador);
-
-    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 48);
-    SDL_Color branco = {255, 255, 255, 255};
-
-    SDL_Surface *textoIniciarSurface = TTF_RenderUTF8_Blended(font, "Iniciar Jogo", branco);
-    SDL_Texture *textoIniciar = SDL_CreateTextureFromSurface(renderizador, textoIniciarSurface);
-    SDL_Surface *textoSairSurface = TTF_RenderUTF8_Blended(font, "Sair", branco);
-    SDL_Texture *textoSair = SDL_CreateTextureFromSurface(renderizador, textoSairSurface);
-
-    SDL_Rect rectIniciar = {LARGURA_TELA / 2 - 100, ALTURA_TELA / 2 - 60, 200, 50};
-    SDL_Rect rectSair = {LARGURA_TELA / 2 - 50, ALTURA_TELA / 2 + 20, 100, 50};
-
-    SDL_RenderCopy(renderizador, textoIniciar, NULL, &rectIniciar);
-    SDL_RenderCopy(renderizador, textoSair, NULL, &rectSair);
-
-    SDL_RenderPresent(renderizador);
-
-    SDL_FreeSurface(textoIniciarSurface);
-    SDL_FreeSurface(textoSairSurface);
-    SDL_DestroyTexture(textoIniciar);
-    SDL_DestroyTexture(textoSair);
-    TTF_CloseFont(font);
-}
-
-void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
-    bool rodando = true;
-    bool menuAtivo = true;
-    SDL_Event evento;
-
-    while (rodando) {
-        while (SDL_PollEvent(&evento)) {
-            if (evento.type == SDL_QUIT) {
-                rodando = false;
-            } else if (evento.type == SDL_MOUSEBUTTONDOWN && menuAtivo) {
-                int mouseX = evento.button.x;
-                int mouseY = evento.button.y;
-
-                if (mouseX >= LARGURA_TELA / 2 - 100 && mouseX <= LARGURA_TELA / 2 + 100 && 
-                    mouseY >= ALTURA_TELA / 2 - 60 && mouseY <= ALTURA_TELA / 2 - 10) {
-                    // Iniciar Jogo
-                    menuAtivo = false;
-                    loopJogo(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
-                } else if (mouseX >= LARGURA_TELA / 2 - 50 && mouseX <= LARGURA_TELA / 2 + 50 && 
-                           mouseY >= ALTURA_TELA / 2 + 20 && mouseY <= ALTURA_TELA / 2 + 70) {
-                    // Sair
-                    rodando = false;
-                }
-            }
-        }
-
-        if (menuAtivo) {
-            desenharMenu();
-        }
-    }
-}
-
-void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
-    bool rodando = true;
-    SDL_Event evento;
-
-    int canhaoX = LARGURA_TELA / 2;
-    int canhaoY = ALTURA_TELA - 50;
-    Uint32 tempoUltimoTiro = 0;  // Variável para controlar o tempo do último tiro
-
-    while (rodando) {
-        // Processa eventos
-        while (SDL_PollEvent(&evento)) {
-            if (evento.type == SDL_QUIT) {
-                rodando = false;
-            } else if (evento.type == SDL_MOUSEBUTTONDOWN && evento.button.button == SDL_BUTTON_LEFT) {
-                Uint32 tempoAtual = SDL_GetTicks();
-                if (tempoAtual - tempoUltimoTiro >= DELAY_TIRO) {  // Verifica se passou 1 segundo desde o último tiro
-                    int mouseX, mouseY;
-                    SDL_GetMouseState(&mouseX, &mouseY);
-                    tiros(canhaoX, canhaoY, mouseX, mouseY);
-                    tempoUltimoTiro = tempoAtual;  // Atualiza o tempo do último tiro
-                }
-            }
-        }
-
-        // Aumentar a frequência de aparição dos lixos
-        if (rand() % 50 == 0) {  // Reduz o valor para aumentar a frequência
-            adicionarLixos(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
-        }
-
-        // Limpa tela
-        SDL_RenderClear(renderizador);
-
-        // Desenha e atualiza a cena
-        desenharCena();
-        desenharBarraDeVida(); // Desenha a barra de vida
-        atualizarEDesenharLixos();
-        atualizarEDesenharTiros();
-
-        // Verifica se a vida chegou a zero
-        if (vidaAtual <= 0) {
-            SDL_Log("Fim de jogo! O mar foi poluído demais.");
-            rodando = false;
-        }
-
-        // Apresenta a nova cena
-        SDL_RenderPresent(renderizador);
-
-        SDL_Delay(16);  // Aproximadamente 60 FPS
-    }
-}
-
-void fecharSDL(SDL_Texture **texturasLixo, int numTexturas) {
-    while (listaLixos != NULL) {
-        Lixo *temp = listaLixos;
-        listaLixos = listaLixos->proximo;
-        free(temp);
-    }
-
-    while (listaTiros != NULL) {
-        Tiro *temp = listaTiros;
-        listaTiros = listaTiros->proximo;
-        free(temp);
-    }
-
-    SDL_DestroyTexture(texturaCanhao);
-    SDL_DestroyTexture(texturaTiro);
-
-    for (int i = 0; i < numTexturas; i++) {
-        SDL_DestroyTexture(texturasLixo[i]);
-    }
-
-    SDL_DestroyRenderer(renderizador);
-    SDL_DestroyWindow(tela);
-    IMG_Quit();
-    TTF_Quit();
-    SDL_Quit();
-}
 
 int main(int argc, char *argv[]) {
     srand(time(NULL));
@@ -524,8 +608,7 @@ int main(int argc, char *argv[]) {
 
     const int numEmojis = 9;
     SDL_Texture *texturasLixo[numEmojis];
-    ///                    🥤, 🧃, 📦, 👟, 👕, 🎒, 🛞, 🪑, 🚽
-    int probabilidades[] = {23, 23, 12, 10, 10, 10, 5, 5, 2}; 
+    int probabilidades[] = {23, 23, 12, 10, 10, 10, 5, 5, 2};
     int totalProbabilidades = 0;
     for (int i = 0; i < numEmojis; i++) {
         totalProbabilidades += probabilidades[i];
