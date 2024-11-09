@@ -73,6 +73,7 @@ void desenharTempoJogo(Uint32 duracaoJogo);
 void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades);
 void fecharSDL(SDL_Texture **texturasLixo, int numTexturas);
 void salvarPontuacao(Uint32 duracaoJogo);
+void desenharMensagemFimDeJogo();
 Uint32 lerRecorde();
 
 // Função para desenhar o tempo de jogo atual
@@ -293,6 +294,19 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
             }
         }
 
+        if (vidaAtual <= 0) {
+            // Se a vida acabar, mostrar a mensagem de fim de jogo
+            desenharCena();
+            desenharMensagemFimDeJogo();
+            SDL_RenderPresent(renderizador);
+            SDL_Delay(3000); // Delay para visualizar a mensagem de fim de jogo por 3 segundos
+            Uint32 tempoTerminoJogo = SDL_GetTicks(); // Tempo quando o jogo termina
+            Uint32 duracaoJogo = tempoTerminoJogo - tempoInicioJogo; // Calcula a duração do jogo em milissegundos
+            salvarPontuacao(duracaoJogo); // Salva a duração do jogo
+            rodando = false;
+            continue;
+        }
+
         if (rand() % 50 == 0) {
             adicionarLixos(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
         }
@@ -304,14 +318,6 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
         atualizarEDesenharLixos();
         atualizarEDesenharTiros();
         desenharTempoJogo(SDL_GetTicks() - tempoInicioJogo); // Desenhar o tempo de jogo atual
-
-        if (vidaAtual <= 0) {
-            Uint32 tempoTerminoJogo = SDL_GetTicks(); // Tempo quando o jogo termina
-            Uint32 duracaoJogo = tempoTerminoJogo - tempoInicioJogo; // Calcula a duração do jogo em milissegundos
-            SDL_Log("Fim de jogo! O mar foi poluído demais.");
-            salvarPontuacao(duracaoJogo); // Salva a duração do jogo
-            rodando = false;
-        }
 
         SDL_RenderPresent(renderizador);
         SDL_Delay(16);
@@ -614,16 +620,62 @@ void desenharCena() {
     int larguraMargem = LARGURA_TELA / 6;
     int larguraRio = LARGURA_TELA - 2 * larguraMargem;
 
+    // Desenhar o rio
     SDL_Rect rio = {larguraMargem, 0, larguraRio, ALTURA_TELA};
     SDL_SetRenderDrawColor(renderizador, corRio.r, corRio.g, corRio.b, corRio.a);
     SDL_RenderFillRect(renderizador, &rio);
 
+    // Desenhar as margens verdes
     SDL_Rect margemEsquerda = {0, 0, larguraMargem, ALTURA_TELA};
     SDL_Rect margemDireita = {LARGURA_TELA - larguraMargem, 0, larguraMargem, ALTURA_TELA};
     SDL_SetRenderDrawColor(renderizador, corMato.r, corMato.g, corMato.b, corMato.a);
     SDL_RenderFillRect(renderizador, &margemEsquerda);
     SDL_RenderFillRect(renderizador, &margemDireita);
 
+    TTF_Font *fontArvores = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf", 36);
+
+    // Desenhar fileiras de árvores na margem esquerda
+    SDL_Texture *texturaArvore = carregarEmoji(renderizador, fontArvores, "🌳");
+    int esquerdaArvoresPosicoesY[] = {60, 130, 190, 250, 310, 370, 430, 490}; 
+    for (int i = 0; i < 8; i++) {  
+        SDL_Rect posicaoArvore1 = {10, esquerdaArvoresPosicoesY[i], 40, 40};
+        SDL_Rect posicaoArvore2 = {60, esquerdaArvoresPosicoesY[i], 40, 40};
+        SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore1);
+        SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore2);
+    }
+
+    // Desenhar prédios e árvores alternados no topo da margem direita
+    SDL_Texture *texturaPredio = carregarEmoji(renderizador, fontArvores, "🏢");
+    int direitaElementosPosicoesY[] = {10, 70};
+
+    for (int i = 0; i < 2; i++) {
+        if (i % 2 == 0) {
+            SDL_Rect posicaoPredio = {LARGURA_TELA - larguraMargem + 10, direitaElementosPosicoesY[i], 60, 60};
+            SDL_Rect posicaoArvore = {LARGURA_TELA - larguraMargem + 80, direitaElementosPosicoesY[i], 40, 40};
+            SDL_RenderCopy(renderizador, texturaPredio, NULL, &posicaoPredio);
+            SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore);
+        } else {
+            SDL_Rect posicaoArvore = {LARGURA_TELA - larguraMargem + 10, direitaElementosPosicoesY[i], 40, 40};
+            SDL_Rect posicaoPredio = {LARGURA_TELA - larguraMargem + 80, direitaElementosPosicoesY[i], 60, 60};
+            SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore);
+            SDL_RenderCopy(renderizador, texturaPredio, NULL, &posicaoPredio);
+        }
+    }
+
+    // Desenhar duas fileiras de árvores no restante da margem direita
+    for (int i = 2; i < 10; i++) {
+        SDL_Rect posicaoArvore1 = {LARGURA_TELA - larguraMargem + 10, direitaElementosPosicoesY[i % 2] + 130 * (i / 2), 40, 40};
+        SDL_Rect posicaoArvore2 = {LARGURA_TELA - larguraMargem + 80, direitaElementosPosicoesY[i % 2] + 130 * (i / 2), 40, 40};
+        SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore1);
+        SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore2);
+    }
+
+    // Destruir texturas de emojis após uso
+    SDL_DestroyTexture(texturaArvore);
+    SDL_DestroyTexture(texturaPredio);
+    TTF_CloseFont(fontArvores);
+
+    // Linha verde e ciano no final
     int alturaLinha = 10;
     SDL_Rect linhaVerdeEsquerda = {0, ALTURA_TELA - alturaLinha, larguraMargem, alturaLinha};
     SDL_SetRenderDrawColor(renderizador, corMato.r, corMato.g, corMato.b, corMato.a);
@@ -637,11 +689,13 @@ void desenharCena() {
     SDL_SetRenderDrawColor(renderizador, corMato.r, corMato.g, corMato.b, corMato.a);
     SDL_RenderFillRect(renderizador, &linhaVerdeDireita);
 
+    // Desenhar a ponte
     int alturaPonte = 30;
     SDL_Rect ponte = {larguraMargem, ALTURA_TELA - alturaLinha - alturaPonte, larguraRio, alturaPonte};
     SDL_SetRenderDrawColor(renderizador, corPonte.r, corPonte.g, corPonte.b, corPonte.a);
     SDL_RenderFillRect(renderizador, &ponte);
 
+    // Desenhar o canhão
     int larguraCano = 50;
     int alturaCano = 50;
     SDL_Rect retanguloCano = {(LARGURA_TELA - larguraCano) / 2, ALTURA_TELA - alturaLinha - alturaCano - 10, larguraCano, alturaCano};
@@ -663,6 +717,29 @@ void desenharBarraDeVida() {
     SDL_SetRenderDrawColor(renderizador, 128, 128, 128, 255); // Cinza
     SDL_Rect barraVazia = {xPos + larguraAtual, yPos, larguraBarra - larguraAtual, alturaBarra};
     SDL_RenderFillRect(renderizador, &barraVazia);
+}
+
+void desenharMensagemFimDeJogo() {
+    // Definir a mensagem de fim de jogo
+    const char* mensagem = "Fim de jogo! O mar foi poluído demais.";
+    SDL_Color branco = {255, 255, 255, 255}; // Cor branca para o texto
+
+    // Renderizar o texto da mensagem
+    SDL_Surface *surfaceMensagem = TTF_RenderUTF8_Blended(fontePontuacao, mensagem, branco);
+    SDL_Texture *texturaMensagem = SDL_CreateTextureFromSurface(renderizador, surfaceMensagem);
+
+    // Calcular a posição para centralizar a mensagem
+    SDL_Rect posicaoMensagem;
+    posicaoMensagem.x = (LARGURA_TELA - surfaceMensagem->w) / 2;
+    posicaoMensagem.y = (ALTURA_TELA - surfaceMensagem->h) / 2;
+    posicaoMensagem.w = surfaceMensagem->w;
+    posicaoMensagem.h = surfaceMensagem->h;
+
+    SDL_RenderCopy(renderizador, texturaMensagem, NULL, &posicaoMensagem);
+
+    // Liberar recursos
+    SDL_FreeSurface(surfaceMensagem);
+    SDL_DestroyTexture(texturaMensagem);
 }
 
 int main(int argc, char *argv[]) {
