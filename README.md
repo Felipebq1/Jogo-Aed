@@ -32,25 +32,30 @@ Antes de executar o jogo, certifique-se de realizar as seguintes etapas para ins
 
 Passos para Compilação e Execução
 
-Clone este repositório em sua máquina:
+1. Clone este repositório em sua máquina:
 
-   git clone https://github.com/Felipebq1/Jogo-Aed.git
+     git clone https://github.com/Felipebq1/Jogo-Aed.git
 
-Compile o programa:
+2. Compile o programa:
 
-   gcc jogo.c -o jogo -lSDL2 -lSDL2_ttf -lSDL2_mixer
+     gcc jogo.c -o jogo -lSDL2 -lSDL2_ttf -lSDL2_mixer
 
-Rode o programa:
+3. Rode o programa:
 
-   ./jogo
+     ./jogo
 
 Divirta-se jogando Defensores do São Francisco!
 
 👤 Equipe
 
 Enzo Nunes - ebn@cesar.school 📩
+
 Felipe Bandeira - fbq@cesar.school 📩
+
 Gabriel Antonio - gaor@cesar.school 📩
+
 George Filho - gdpf@cesar.school 📩
+
 Miguel Andrade - mjfa@cesar 📩
+
 Pedro Dhalia - pmd2@cesar.school 📩
