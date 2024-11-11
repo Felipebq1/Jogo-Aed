@@ -27,7 +27,7 @@ Antes de executar o jogo, certifique-se de realizar as seguintes etapas para ins
 
 2. Instale as bibliotecas SDL necessárias:
 
-     sudo apt-get install libsdl2-dev libsdl2-ttf-dev libsdl2-mixer-dev
+     sudo apt-get install -y build-essential libsdl2-dev libsdl2-image-dev
 
 
 Passos para Compilação e Execução
@@ -38,7 +38,7 @@ Passos para Compilação e Execução
 
 2. Compile o programa:
 
-     gcc jogo.c -o jogo -lSDL2 -lSDL2_ttf -lSDL2_mixer
+     gcc jogo.c -o jogo -lSDL2 -lSDL2_image -lSDL2_ttf -lm 
 
 3. Rode o programa:
 
