@@ -56,6 +56,6 @@ Gabriel Antonio - gaor@cesar.school 📩
 
 George Filho - gdpf@cesar.school 📩
 
-Miguel Andrade - mjfa@cesar 📩
+Miguel Andrade - mjfa@cesar.school 📩
 
 Pedro Dhalia - pmd2@cesar.school 📩
