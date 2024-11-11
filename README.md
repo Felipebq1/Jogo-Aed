@@ -1,7 +1,7 @@
 # Defensores do São Francisco
 📄 Descrição
 
-Defensores do São Francisco é um jogo onde você deve proteger o Rio São Francisco de ser poluído por lixos flutuantes. Use seu canhão para atirar e destruir os lixos antes que eles alcancem a margem do rio.
+Defensores do São Francisco é um jogo exclusivo para linux, onde você deve proteger o Rio São Francisco de ser poluído por lixos flutuantes. Use seu canhão para atirar e destruir os lixos antes que eles alcancem a margem do rio.
 
 🎯 Objetivo do Jogo
 
