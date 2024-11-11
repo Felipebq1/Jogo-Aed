@@ -38,9 +38,9 @@ TTF_Font *fontePontuacao = NULL;
 int vidaAtual = VIDA_MAXIMA;
 Uint32 tempoInicioJogo;
 
-// Declaração antecipada das estruturas e funções necessárias
+// Estruturas de dados para lixos e tiros
 typedef struct Lixo {
-    int x, y;
+    int posicaoXLixo, posicaoYLixo;
     int largura, altura;
     SDL_Texture *textura;
     int dano;  // Dano que este tipo de lixo causa
@@ -48,19 +48,19 @@ typedef struct Lixo {
 } Lixo;
 
 typedef struct Tiro {
-    float x, y;
-    float vx, vy;
+    float posicaoXTiro, posicaoYTiro;
+    float velocidadeXTiro, velocidadeYTiro;
     struct Tiro *proximo;
 } Tiro;
 
-// Listas de lixos e tiros
+// Listas encadeadas para lixos e tiros
 Lixo *listaLixos = NULL;
 Tiro *listaTiros = NULL;
 
 void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades);
 SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *emoji);
 void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTexturas, int totalProbabilidades);
-void tiros(float inicioX, float inicioY, float destinoX, float destinoY);
+void tiros(float inicioXTiro, float inicioYTiro, float destinoXTiro, float destinoYTiro);
 void atualizarEDesenharLixos();
 bool verificarColisao(SDL_Rect a, SDL_Rect b);
 void atualizarEDesenharTiros();
@@ -77,6 +77,7 @@ void desenharMensagemFimDeJogo();
 Uint32 lerRecorde();
 
 // Função para desenhar o tempo de jogo atual
+// Exibe o tempo decorrido desde o início do jogo no canto inferior esquerdo da tela
 void desenharTempoJogo(Uint32 duracaoJogo) {
     SDL_Color branco = {255, 255, 255, 255};
     char texto[50];
@@ -95,6 +96,7 @@ void desenharTempoJogo(Uint32 duracaoJogo) {
 }
 
 // Função para salvar a duração do jogo no arquivo e ordenar
+// Ordena as pontuações existentes junto com a nova e reescreve o arquivo de pontuações
 void salvarPontuacao(Uint32 duracaoJogo) {
     Uint32 pontuacoes[MAX_PONTUACOES];
     int numPontuacoes = 0;
@@ -111,27 +113,28 @@ void salvarPontuacao(Uint32 duracaoJogo) {
         pontuacoes[numPontuacoes++] = duracaoJogo;
     }
 
-    // Ordena as pontuações em ordem decrescente
-    for (int i = 0; i < numPontuacoes - 1; i++) {
-        for (int j = 0; j < numPontuacoes - i - 1; j++) {
-            if (pontuacoes[j] < pontuacoes[j + 1]) {
-                Uint32 temp = pontuacoes[j];
-                pontuacoes[j] = pontuacoes[j + 1];
-                pontuacoes[j + 1] = temp;
+    // Ordena as pontuações em ordem decrescente utilizando algoritmo de ordenação por bolha
+    for (int indicePontuacao = 0; indicePontuacao < numPontuacoes - 1; indicePontuacao++) {
+        for (int indiceComparacao = 0; indiceComparacao < numPontuacoes - indicePontuacao - 1; indiceComparacao++) {
+            if (pontuacoes[indiceComparacao] < pontuacoes[indiceComparacao + 1]) {
+                Uint32 temp = pontuacoes[indiceComparacao];
+                pontuacoes[indiceComparacao] = pontuacoes[indiceComparacao + 1];
+                pontuacoes[indiceComparacao + 1] = temp;
             }
         }
     }
 
     arquivo = fopen("pontuacoes.txt", "w");
     if (arquivo) {
-        for (int i = 0; i < numPontuacoes; i++) {
-            fprintf(arquivo, "%u\n", pontuacoes[i]);
+        for (int indicePontuacao = 0; indicePontuacao < numPontuacoes; indicePontuacao++) {
+            fprintf(arquivo, "%u\n", pontuacoes[indicePontuacao]);
         }
         fclose(arquivo);
     }
 }
 
 // Função para ler o recorde do arquivo
+// Retorna a maior pontuação registrada
 Uint32 lerRecorde() {
     Uint32 recorde = 0;
     FILE *arquivo = fopen("pontuacoes.txt", "r");
@@ -142,6 +145,7 @@ Uint32 lerRecorde() {
     return recorde;
 }
 
+// Função para desenhar o menu inicial com opções de Iniciar e Sair
 void desenharMenu(Uint32 recorde) {
     // Defina a cor de fundo para verde escuro
     SDL_SetRenderDrawColor(renderizador, 0, 100, 0, 255);  // Verde escuro
@@ -228,6 +232,8 @@ void desenharMenu(Uint32 recorde) {
     TTF_CloseFont(fonteBotoes);
 }
 
+// Função para gerenciar o loop do menu inicial
+// Lida com eventos de clique do mouse para iniciar o jogo ou sair
 void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
     bool rodando = true;
     bool menuAtivo = true;
@@ -240,8 +246,8 @@ void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
             if (evento.type == SDL_QUIT) {
                 rodando = false;
             } else if (evento.type == SDL_MOUSEBUTTONDOWN && menuAtivo) {
-                int mouseX = evento.button.x;
-                int mouseY = evento.button.y;
+                int posicaoXMouse = evento.button.x;
+                int posicaoYMouse = evento.button.y;
 
                 // Definir o retângulo do botão "Iniciar" novamente
                 SDL_Rect botaoIniciar = {LARGURA_TELA / 2 - 220, ALTURA_TELA / 2 - 25, 200, 50};
@@ -249,15 +255,15 @@ void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
                 SDL_Rect botaoSair = {LARGURA_TELA / 2 + 20, ALTURA_TELA / 2 - 25, 200, 50};
 
                 // Verificar cliques no botão "Iniciar"
-                if (mouseX >= botaoIniciar.x && mouseX <= botaoIniciar.x + botaoIniciar.w &&
-                    mouseY >= botaoIniciar.y && mouseY <= botaoIniciar.y + botaoIniciar.h) {
+                if (posicaoXMouse >= botaoIniciar.x && posicaoXMouse <= botaoIniciar.x + botaoIniciar.w &&
+                    posicaoYMouse >= botaoIniciar.y && posicaoYMouse <= botaoIniciar.y + botaoIniciar.h) {
                     // Iniciar Jogo
                     menuAtivo = false;
                     loopJogo(texturasLixo, probabilidades, numTexturas, totalProbabilidades);
                 } 
                 // Verificar cliques no botão "Sair"
-                else if (mouseX >= botaoSair.x && mouseX <= botaoSair.x + botaoSair.w &&
-                         mouseY >= botaoSair.y && mouseY <= botaoSair.y + botaoSair.h) {
+                else if (posicaoXMouse >= botaoSair.x && posicaoXMouse <= botaoSair.x + botaoSair.w &&
+                         posicaoYMouse >= botaoSair.y && posicaoYMouse <= botaoSair.y + botaoSair.h) {
                     // Sair
                     rodando = false;
                 }
@@ -270,12 +276,14 @@ void loopMenu(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
     }
 }
 
+// Função principal do loop do jogo
+// Controla a lógica de tempo de jogo, eventos, e atualizações da tela
 void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, int totalProbabilidades) {
     bool rodando = true;
     SDL_Event evento;
 
-    int canhaoX = LARGURA_TELA / 2;
-    int canhaoY = ALTURA_TELA - 50;
+    int posicaoXCanhao = LARGURA_TELA / 2;
+    int posicaoYCanhao = ALTURA_TELA - 50;
     Uint32 tempoUltimoTiro = 0;  // Variável para controlar o tempo do último tiro
     tempoInicioJogo = SDL_GetTicks(); // Captura o tempo de início do jogo
 
@@ -286,9 +294,9 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
             } else if (evento.type == SDL_MOUSEBUTTONDOWN && evento.button.button == SDL_BUTTON_LEFT) {
                 Uint32 tempoAtual = SDL_GetTicks();
                 if (tempoAtual - tempoUltimoTiro >= DELAY_TIRO) {
-                    int mouseX, mouseY;
-                    SDL_GetMouseState(&mouseX, &mouseY);
-                    tiros(canhaoX, canhaoY, mouseX, mouseY);
+                    int posicaoXMouse, posicaoYMouse;
+                    SDL_GetMouseState(&posicaoXMouse, &posicaoYMouse);
+                    tiros(posicaoXCanhao, posicaoYCanhao, posicaoXMouse, posicaoYMouse);
                     tempoUltimoTiro = tempoAtual;
                 }
             }
@@ -324,6 +332,7 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
     }
 }
 
+// Inicializa todos os componentes SDL necessários
 bool inicializarSDL() {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         SDL_Log("Erro ao inicializar SDL: %s", SDL_GetError());
@@ -357,6 +366,7 @@ bool inicializarSDL() {
     return true;
 }
 
+// Carrega todas as texturas e fontes necessárias para o jogo
 bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas) {
     SDL_Surface *surfaceCarregada = IMG_Load("imagens/cannon-isolated-on-transparent-free-png.webp");
     if (!surfaceCarregada) {
@@ -385,9 +395,9 @@ bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas) {
     }
 
     const char* emojis[] = {"🥤", "🧃", "📦", "👟", "👕", "🎒", "🛞", "🪑", "🚽"};
-    for (int i = 0; i < numTexturas; i++) {
-        texturasLixo[i] = carregarEmoji(renderizador, font, emojis[i]);
-        if (!texturasLixo[i]) {
+    for (int indiceEmoji = 0; indiceEmoji < numTexturas; indiceEmoji++) {
+        texturasLixo[indiceEmoji] = carregarEmoji(renderizador, font, emojis[indiceEmoji]);
+        if (!texturasLixo[indiceEmoji]) {
             SDL_Log("Erro ao criar textura do emoji de lixo: %s", SDL_GetError());
             TTF_CloseFont(font);
             return false;
@@ -405,6 +415,7 @@ bool carregarMidia(SDL_Texture **texturasLixo, int numTexturas) {
     return true;
 }
 
+// Libera recursos e fecha o SDL de forma segura
 void fecharSDL(SDL_Texture **texturasLixo, int numTexturas) {
     while (listaLixos != NULL) {
         Lixo *temp = listaLixos;
@@ -421,8 +432,8 @@ void fecharSDL(SDL_Texture **texturasLixo, int numTexturas) {
     SDL_DestroyTexture(texturaCanhao);
     SDL_DestroyTexture(texturaTiro);
 
-    for (int i = 0; i < numTexturas; i++) {
-        SDL_DestroyTexture(texturasLixo[i]);
+    for (int indiceTextura = 0; indiceTextura < numTexturas; indiceTextura++) {
+        SDL_DestroyTexture(texturasLixo[indiceTextura]);
     }
 
     TTF_CloseFont(fontePontuacao);
@@ -433,6 +444,7 @@ void fecharSDL(SDL_Texture **texturasLixo, int numTexturas) {
     SDL_Quit();
 }
 
+// Carrega um emoji como textura para ser usado no jogo
 SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *emoji) {
     SDL_Color branco = {255, 255, 255, 255};
     SDL_Surface *surface = TTF_RenderUTF8_Blended(font, emoji, branco);
@@ -441,36 +453,38 @@ SDL_Texture* carregarEmoji(SDL_Renderer *renderer, TTF_Font *font, const char *e
     return textura;
 }
 
+// Adiciona novos lixos na lista de lixos existentes, com base em probabilidades
 void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTexturas, int totalProbabilidades) {
     int larguraMargem = LARGURA_TELA / 6;
     int larguraRio = LARGURA_TELA - 2 * larguraMargem;
 
     // Gera a posição X do lixo para estar apenas dentro do rio
-    int x = larguraMargem + rand() % (larguraRio - LARGURA_LIXO);
+    int posicaoXLixo = larguraMargem + rand() % (larguraRio - LARGURA_LIXO);
 
     int sorteio = rand() % totalProbabilidades;
-    int acumulador = 0;
-    int index = 0;
-    for (int i = 0; i < numTexturas; i++) {
-        acumulador += probabilidades[i];
-        if (sorteio < acumulador) {
-            index = i;
+    int acumuladorProbabilidades = 0;
+    int indiceLixo = 0;
+    for (int indiceProbabilidade = 0; indiceProbabilidade < numTexturas; indiceProbabilidade++) {
+        acumuladorProbabilidades += probabilidades[indiceProbabilidade];
+        if (sorteio < acumuladorProbabilidades) {
+            indiceLixo = indiceProbabilidade;
             break;
         }
     }
 
     Lixo *novoLixo = (Lixo *)malloc(sizeof(Lixo));
-    novoLixo->x = x;
-    novoLixo->y = 0;
-    novoLixo->textura = texturas[index];
+    novoLixo->posicaoXLixo = posicaoXLixo;
+    novoLixo->posicaoYLixo = 0;
+    novoLixo->textura = texturas[indiceLixo];
 
-    if (index == 2 || index == 6 || index == 7 || index == 8) {  // 📦, 🛞, 🪑, 🚽
+    // Ajusta o tamanho do lixo com base no tipo
+    if (indiceLixo == 2 || indiceLixo == 6 || indiceLixo == 7 || indiceLixo == 8) {  // 📦, 🛞, 🪑, 🚽
         novoLixo->largura = LARGURA_LIXO * 2;
         novoLixo->altura = ALTURA_LIXO * 2;
-    } else if(index == 4 || index == 5) { // 👕, 🎒
+    } else if(indiceLixo == 4 || indiceLixo == 5) { // 👕, 🎒
         novoLixo->largura = LARGURA_LIXO * 1.5;
         novoLixo->altura = ALTURA_LIXO * 1.5;
-    } else if(index == 3) { // 👟
+    } else if(indiceLixo == 3) { // 👟
         novoLixo->largura = LARGURA_LIXO * 1.2;
         novoLixo->altura = ALTURA_LIXO * 1.2;
     } else {   // 🥤, 🧃
@@ -478,14 +492,14 @@ void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTextura
         novoLixo->altura = ALTURA_LIXO;
     }
 
-    // Definir dano com base no tipo de lixo
-    if (index == 0 || index == 1) {  // 🥤, 🧃
+    // Define o dano com base no tipo de lixo
+    if (indiceLixo == 0 || indiceLixo == 1) {  // 🥤, 🧃
         novoLixo->dano = DANO_BAIXO;
-    } else if (index == 2 || index == 3 || index == 4 || index == 5) {  // 📦, 👟, 👕, 🎒
+    } else if (indiceLixo == 2 || indiceLixo == 3 || indiceLixo == 4 || indiceLixo == 5) {  // 📦, 👟, 👕, 🎒
         novoLixo->dano = DANO_MEDIO;
-    } else if (index == 6 || index == 7) {  // 🛞, 🪑
+    } else if (indiceLixo == 6 || indiceLixo == 7) {  // 🛞, 🪑
         novoLixo->dano = DANO_ALTO;
-    } else if (index == 8) {  // 🚽
+    } else if (indiceLixo == 8) {  // 🚽
         novoLixo->dano = DANO_MUITO_ALTO;
     }
 
@@ -493,82 +507,90 @@ void adicionarLixos(SDL_Texture *texturas[], int *probabilidades, int numTextura
     listaLixos = novoLixo;
 }
 
-void tiros(float inicioX, float inicioY, float destinoX, float destinoY) {
+// Cria e adiciona um novo tiro à lista de tiros
+void tiros(float inicioXTiro, float inicioYTiro, float destinoXTiro, float destinoYTiro) {
     Tiro *novoTiro = (Tiro *)malloc(sizeof(Tiro));
-    novoTiro->x = inicioX;
-    novoTiro->y = inicioY;
+    novoTiro->posicaoXTiro = inicioXTiro;
+    novoTiro->posicaoYTiro = inicioYTiro;
 
-    // Calcular direção
-    float dx = destinoX - inicioX;
-    float dy = destinoY - inicioY;
-    float comprimento = sqrtf(dx * dx + dy * dy);
+    // Calcular direção do tiro
+    float diferencaX = destinoXTiro - inicioXTiro;
+    float diferencaY = destinoYTiro - inicioYTiro;
+    float comprimento = sqrtf(diferencaX * diferencaX + diferencaY * diferencaY);
     if (comprimento != 0) {
-        novoTiro->vx = VELOCIDADE_TIRO * (dx / comprimento);
-        novoTiro->vy = VELOCIDADE_TIRO * (dy / comprimento);
+        novoTiro->velocidadeXTiro = VELOCIDADE_TIRO * (diferencaX / comprimento);
+        novoTiro->velocidadeYTiro = VELOCIDADE_TIRO * (diferencaY / comprimento);
     } else {
-        novoTiro->vx = 0;
-        novoTiro->vy = -VELOCIDADE_TIRO; // Padrão para cima se não houver movimento
+        novoTiro->velocidadeXTiro = 0;
+        novoTiro->velocidadeYTiro = -VELOCIDADE_TIRO; // Padrão para cima se não houver movimento
     }
 
     novoTiro->proximo = listaTiros;
     listaTiros = novoTiro;
 }
 
+// Atualiza a posição dos lixos e os desenha na tela
+// Remove lixos que saem da tela e atualiza a vida do rio
 void atualizarEDesenharLixos() {
-    Lixo *atual = listaLixos;
-    Lixo *anterior = NULL;
+    Lixo *lixoAtual = listaLixos;
+    Lixo *lixoAnterior = NULL;
 
-    while (atual != NULL) {
-        atual->y += VELOCIDADE_LIXO;
+    while (lixoAtual != NULL) {
+        lixoAtual->posicaoYLixo += VELOCIDADE_LIXO;
 
-        SDL_Rect retanguloLixo = {atual->x, atual->y, atual->largura, atual->altura};
-        SDL_RenderCopy(renderizador, atual->textura, NULL, &retanguloLixo);
+        SDL_Rect retanguloLixo = {lixoAtual->posicaoXLixo, lixoAtual->posicaoYLixo, lixoAtual->largura, lixoAtual->altura};
+        SDL_RenderCopy(renderizador, lixoAtual->textura, NULL, &retanguloLixo);
 
-        if (atual->y > ALTURA_TELA) {
+        if (lixoAtual->posicaoYLixo > ALTURA_TELA) {
             // Reduz a vida de acordo com o dano do lixo
-            vidaAtual -= atual->dano;
+            vidaAtual -= lixoAtual->dano;
             if (vidaAtual < 0) {
                 vidaAtual = 0;
             }
 
-            if (anterior == NULL) {
-                listaLixos = atual->proximo;
-                free(atual);
-                atual = listaLixos;
+            // Remove o lixo da lista
+            if (lixoAnterior == NULL) {
+                listaLixos = lixoAtual->proximo;
+                free(lixoAtual);
+                lixoAtual = listaLixos;
             } else {
-                anterior->proximo = atual->proximo;
-                free(atual);
-                atual = anterior->proximo;
+                lixoAnterior->proximo = lixoAtual->proximo;
+                free(lixoAtual);
+                lixoAtual = lixoAnterior->proximo;
             }
         } else {
-            anterior = atual;
-            atual = atual->proximo;
+            lixoAnterior = lixoAtual;
+            lixoAtual = lixoAtual->proximo;
         }
     }
 }
 
-bool verificarColisao(SDL_Rect a, SDL_Rect b) {
-    return !(a.x + a.w < b.x || a.x > b.x + b.w || a.y + a.h < b.y || a.y > b.y + b.h);
+// Verifica se dois retângulos colidem
+bool verificarColisao(SDL_Rect retanguloA, SDL_Rect retanguloB) {
+    return !(retanguloA.x + retanguloA.w < retanguloB.x || retanguloA.x > retanguloB.x + retanguloB.w || retanguloA.y + retanguloA.h < retanguloB.y || retanguloA.y > retanguloB.y + retanguloB.h);
 }
 
+// Atualiza a posição dos tiros e verifica colisões com lixos
+// Remove tiros e lixos que colidem ou saem da tela
 void atualizarEDesenharTiros() {
-    Tiro *atual = listaTiros;
-    Tiro *anterior = NULL;
+    Tiro *tiroAtual = listaTiros;
+    Tiro *tiroAnterior = NULL;
 
-    while (atual != NULL) {
-        atual->x += atual->vx;
-        atual->y += atual->vy;
+    while (tiroAtual != NULL) {
+        tiroAtual->posicaoXTiro += tiroAtual->velocidadeXTiro;
+        tiroAtual->posicaoYTiro += tiroAtual->velocidadeYTiro;
 
-        SDL_Rect retanguloTiro = {(int)atual->x - 10 / 2, (int)atual->y, 20, 20};
+        SDL_Rect retanguloTiro = {(int)tiroAtual->posicaoXTiro - 10 / 2, (int)tiroAtual->posicaoYTiro, 20, 20};
 
         Lixo *lixoAtual = listaLixos;
         Lixo *lixoAnterior = NULL;
         bool colisaoDetectada = false;
 
         while (lixoAtual != NULL && !colisaoDetectada) {
-            SDL_Rect retanguloLixo = {lixoAtual->x, lixoAtual->y, lixoAtual->largura, lixoAtual->altura};
+            SDL_Rect retanguloLixo = {lixoAtual->posicaoXLixo, lixoAtual->posicaoYLixo, lixoAtual->largura, lixoAtual->altura};
 
             if (verificarColisao(retanguloTiro, retanguloLixo)) {
+                // Remove o lixo que colidiu
                 if (lixoAnterior == NULL) {
                     listaLixos = lixoAtual->proximo;
                     free(lixoAtual);
@@ -586,36 +608,39 @@ void atualizarEDesenharTiros() {
         }
 
         if (colisaoDetectada) {
-            if (anterior == NULL) {
-                listaTiros = atual->proximo;
-                free(atual);
-                atual = listaTiros;
+            // Remove o tiro da lista se houve colisão
+            if (tiroAnterior == NULL) {
+                listaTiros = tiroAtual->proximo;
+                free(tiroAtual);
+                tiroAtual = listaTiros;
             } else {
-                anterior->proximo = atual->proximo;
-                free(atual);
-                atual = anterior->proximo;
+                tiroAnterior->proximo = tiroAtual->proximo;
+                free(tiroAtual);
+                tiroAtual = tiroAnterior->proximo;
             }
         } else {
             SDL_RenderCopy(renderizador, texturaTiro, NULL, &retanguloTiro);
 
-            if (atual->y < 0 || atual->y > ALTURA_TELA || atual->x < 0 || atual->x > LARGURA_TELA) {
-                if (anterior == NULL) {
-                    listaTiros = atual->proximo;
-                    free(atual);
-                    atual = listaTiros;
+            // Remove o tiro se saiu da tela
+            if (tiroAtual->posicaoYTiro < 0 || tiroAtual->posicaoYTiro > ALTURA_TELA || tiroAtual->posicaoXTiro < 0 || tiroAtual->posicaoXTiro > LARGURA_TELA) {
+                if (tiroAnterior == NULL) {
+                    listaTiros = tiroAtual->proximo;
+                    free(tiroAtual);
+                    tiroAtual = listaTiros;
                 } else {
-                    anterior->proximo = atual->proximo;
-                    free(atual);
-                    atual = anterior->proximo;
+                    tiroAnterior->proximo = tiroAtual->proximo;
+                    free(tiroAtual);
+                    tiroAtual = tiroAnterior->proximo;
                 }
             } else {
-                anterior = atual;
-                atual = atual->proximo;
+                tiroAnterior = tiroAtual;
+                tiroAtual = tiroAtual->proximo;
             }
         }
     }
 }
 
+// Desenha o cenário do jogo, incluindo o rio e as margens
 void desenharCena() {
     int larguraMargem = LARGURA_TELA / 6;
     int larguraRio = LARGURA_TELA - 2 * larguraMargem;
@@ -637,9 +662,9 @@ void desenharCena() {
     // Desenhar fileiras de árvores na margem esquerda
     SDL_Texture *texturaArvore = carregarEmoji(renderizador, fontArvores, "🌳");
     int esquerdaArvoresPosicoesY[] = {60, 130, 190, 250, 310, 370, 430, 490}; 
-    for (int i = 0; i < 8; i++) {  
-        SDL_Rect posicaoArvore1 = {10, esquerdaArvoresPosicoesY[i], 40, 40};
-        SDL_Rect posicaoArvore2 = {60, esquerdaArvoresPosicoesY[i], 40, 40};
+    for (int indiceArvore = 0; indiceArvore < 8; indiceArvore++) {  
+        SDL_Rect posicaoArvore1 = {10, esquerdaArvoresPosicoesY[indiceArvore], 40, 40};
+        SDL_Rect posicaoArvore2 = {60, esquerdaArvoresPosicoesY[indiceArvore], 40, 40};
         SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore1);
         SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore2);
     }
@@ -648,24 +673,24 @@ void desenharCena() {
     SDL_Texture *texturaPredio = carregarEmoji(renderizador, fontArvores, "🏢");
     int direitaElementosPosicoesY[] = {10, 70};
 
-    for (int i = 0; i < 2; i++) {
-        if (i % 2 == 0) {
-            SDL_Rect posicaoPredio = {LARGURA_TELA - larguraMargem + 10, direitaElementosPosicoesY[i], 60, 60};
-            SDL_Rect posicaoArvore = {LARGURA_TELA - larguraMargem + 80, direitaElementosPosicoesY[i], 40, 40};
+    for (int indiceElemento = 0; indiceElemento < 2; indiceElemento++) {
+        if (indiceElemento % 2 == 0) {
+            SDL_Rect posicaoPredio = {LARGURA_TELA - larguraMargem + 10, direitaElementosPosicoesY[indiceElemento], 60, 60};
+            SDL_Rect posicaoArvore = {LARGURA_TELA - larguraMargem + 80, direitaElementosPosicoesY[indiceElemento], 40, 40};
             SDL_RenderCopy(renderizador, texturaPredio, NULL, &posicaoPredio);
             SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore);
         } else {
-            SDL_Rect posicaoArvore = {LARGURA_TELA - larguraMargem + 10, direitaElementosPosicoesY[i], 40, 40};
-            SDL_Rect posicaoPredio = {LARGURA_TELA - larguraMargem + 80, direitaElementosPosicoesY[i], 60, 60};
+            SDL_Rect posicaoArvore = {LARGURA_TELA - larguraMargem + 10, direitaElementosPosicoesY[indiceElemento], 40, 40};
+            SDL_Rect posicaoPredio = {LARGURA_TELA - larguraMargem + 80, direitaElementosPosicoesY[indiceElemento], 60, 60};
             SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore);
             SDL_RenderCopy(renderizador, texturaPredio, NULL, &posicaoPredio);
         }
     }
 
     // Desenhar duas fileiras de árvores no restante da margem direita
-    for (int i = 2; i < 10; i++) {
-        SDL_Rect posicaoArvore1 = {LARGURA_TELA - larguraMargem + 10, direitaElementosPosicoesY[i % 2] + 130 * (i / 2), 40, 40};
-        SDL_Rect posicaoArvore2 = {LARGURA_TELA - larguraMargem + 80, direitaElementosPosicoesY[i % 2] + 130 * (i / 2), 40, 40};
+    for (int indiceArvore = 2; indiceArvore < 10; indiceArvore++) {
+        SDL_Rect posicaoArvore1 = {LARGURA_TELA - larguraMargem + 10, direitaElementosPosicoesY[indiceArvore % 2] + 130 * (indiceArvore / 2), 40, 40};
+        SDL_Rect posicaoArvore2 = {LARGURA_TELA - larguraMargem + 80, direitaElementosPosicoesY[indiceArvore % 2] + 130 * (indiceArvore / 2), 40, 40};
         SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore1);
         SDL_RenderCopy(renderizador, texturaArvore, NULL, &posicaoArvore2);
     }
@@ -702,23 +727,25 @@ void desenharCena() {
     SDL_RenderCopy(renderizador, texturaCanhao, NULL, &retanguloCano);
 }
 
+// Desenha a barra de vida no topo da tela
 void desenharBarraDeVida() {
     int larguraBarra = 200; // Largura inicial da barra
     int alturaBarra = 20;   // Altura da barra
-    int xPos = 10;          // Posição X da barra
-    int yPos = 10;          // Posição Y da barra
+    int posicaoXBarra = 10; // Posição X da barra
+    int posicaoYBarra = 10; // Posição Y da barra
 
     int larguraAtual = (vidaAtual * larguraBarra) / VIDA_MAXIMA;
 
     SDL_SetRenderDrawColor(renderizador, 255, 0, 0, 255); // Vermelho
-    SDL_Rect barraVida = {xPos, yPos, larguraAtual, alturaBarra};
+    SDL_Rect barraVida = {posicaoXBarra, posicaoYBarra, larguraAtual, alturaBarra};
     SDL_RenderFillRect(renderizador, &barraVida);
 
     SDL_SetRenderDrawColor(renderizador, 128, 128, 128, 255); // Cinza
-    SDL_Rect barraVazia = {xPos + larguraAtual, yPos, larguraBarra - larguraAtual, alturaBarra};
+    SDL_Rect barraVazia = {posicaoXBarra + larguraAtual, posicaoYBarra, larguraBarra - larguraAtual, alturaBarra};
     SDL_RenderFillRect(renderizador, &barraVazia);
 }
 
+// Mostra a mensagem de fim de jogo no centro da tela
 void desenharMensagemFimDeJogo() {
     // Definir a mensagem de fim de jogo
     const char* mensagem = "Fim de jogo! O mar foi poluído demais.";
@@ -737,11 +764,12 @@ void desenharMensagemFimDeJogo() {
 
     SDL_RenderCopy(renderizador, texturaMensagem, NULL, &posicaoMensagem);
 
-    // Liberar recursos
+    // Liberar recursos utilizados
     SDL_FreeSurface(surfaceMensagem);
     SDL_DestroyTexture(texturaMensagem);
 }
 
+// Função principal
 int main(int argc, char *argv[]) {
     srand(time(NULL));
 
@@ -753,8 +781,8 @@ int main(int argc, char *argv[]) {
     SDL_Texture *texturasLixo[numEmojis];
     int probabilidades[] = {23, 23, 12, 10, 10, 10, 5, 5, 2};
     int totalProbabilidades = 0;
-    for (int i = 0; i < numEmojis; i++) {
-        totalProbabilidades += probabilidades[i];
+    for (int indiceEmoji = 0; indiceEmoji < numEmojis; indiceEmoji++) {
+        totalProbabilidades += probabilidades[indiceEmoji];
     }
 
     if (!carregarMidia(texturasLixo, numEmojis)) {
