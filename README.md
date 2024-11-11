@@ -9,11 +9,11 @@ O objetivo é manter o Rio São Francisco limpo o maior tempo possível, destrui
 
 🕹️ Como Jogar
 
-Use o mouse para mirar e clique para atirar nos lixos.
+-Use o mouse para mirar e clique para atirar nos lixos.
 
-Mantenha a barra de vida do rio no máximo para evitar poluição.
+-Mantenha a barra de vida do rio no máximo para evitar poluição.
 
-Foque em destruir o máximo de lixos possível para proteger o rio.
+-Foque em destruir o máximo de lixos possível para proteger o rio.
 
 ♟️ Executando o Jogo
 
@@ -23,11 +23,12 @@ Antes de executar o jogo, certifique-se de realizar as seguintes etapas para ins
 
 1. Atualize a lista de pacotes:
 
-sudo apt-get update
+      sudo apt-get update
 
 2. Instale as bibliotecas SDL necessárias:
 
-sudo apt-get install libsdl2-dev libsdl2-ttf-dev libsdl2-mixer-dev
+     sudo apt-get install libsdl2-dev libsdl2-ttf-dev libsdl2-mixer-dev
+
 
 Passos para Compilação e Execução
 
