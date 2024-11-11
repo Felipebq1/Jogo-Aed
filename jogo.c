@@ -13,7 +13,7 @@
 #define ALTURA_LIXO 20
 #define VELOCIDADE_LIXO 1
 #define VELOCIDADE_TIRO 5
-#define DELAY_TIRO 900  
+#define DELAY_TIRO 1000  
 #define VIDA_MAXIMA 100
 #define MAX_PONTUACOES 100
 
