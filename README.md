@@ -21,11 +21,11 @@ Requisitos
 
 Antes de executar o jogo, certifique-se de realizar as seguintes etapas para instalar as dependências necessárias:
 
-Atualize a lista de pacotes:
+1. Atualize a lista de pacotes:
 
 sudo apt-get update
 
-Instale as bibliotecas SDL necessárias:
+2. Instale as bibliotecas SDL necessárias:
 
 sudo apt-get install libsdl2-dev libsdl2-ttf-dev libsdl2-mixer-dev
 
