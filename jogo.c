@@ -113,7 +113,7 @@ void salvarPontuacao(Uint32 duracaoJogo) {
         pontuacoes[numPontuacoes++] = duracaoJogo;
     }
 
-    // Ordena as pontuações em ordem decrescente utilizando algoritmo de ordenação por bolha
+    // Ordena as pontuações em ordem decrescente utilizando algoritmo de ordenação Bubble Sort
     for (int indicePontuacao = 0; indicePontuacao < numPontuacoes - 1; indicePontuacao++) {
         for (int indiceComparacao = 0; indiceComparacao < numPontuacoes - indicePontuacao - 1; indiceComparacao++) {
             if (pontuacoes[indiceComparacao] < pontuacoes[indiceComparacao + 1]) {
@@ -152,12 +152,12 @@ void desenharMenu(Uint32 recorde) {
     SDL_RenderClear(renderizador);
 
     // Carregar a fonte para o título e botões
-    TTF_Font *fonteTitulo = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 64);
+    TTF_Font *fonteTitulo = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 56);
     TTF_Font *fonteBotoes = TTF_OpenFont("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", 48);
     SDL_Color branco = {255, 255, 255, 255};
 
     // Renderizar o texto do título
-    SDL_Surface *tituloSurface = TTF_RenderUTF8_Blended(fonteTitulo, "Nome do Jogo", branco);
+    SDL_Surface *tituloSurface = TTF_RenderUTF8_Blended(fonteTitulo, "Defensores do São Francisco", branco);
     SDL_Texture *tituloTexto = SDL_CreateTextureFromSurface(renderizador, tituloSurface);
 
     // Calcular a posição do título para centralizá-lo
@@ -339,7 +339,7 @@ bool inicializarSDL() {
         return false;
     }
     
-    tela = SDL_CreateWindow("Rio com Ponte", 
+    tela = SDL_CreateWindow("Defensores do São Francisco", 
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
                               LARGURA_TELA, ALTURA_TELA, SDL_WINDOW_SHOWN);
     if (!tela) {
