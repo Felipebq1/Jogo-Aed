@@ -27,7 +27,8 @@ Antes de executar o jogo, certifique-se de realizar as seguintes etapas para ins
 
 2. Instale as bibliotecas SDL necessárias:
 
-     sudo apt-get install -y build-essential libsdl2-dev libsdl2-image-dev
+     sudo apt-get install -y build-essential libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev
+
 
 
 Passos para Compilação e Execução
