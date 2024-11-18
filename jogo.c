@@ -304,12 +304,13 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
 
         if (vidaAtual <= 0) {
             // Se a vida acabar, mostrar a mensagem de fim de jogo
-            desenharCena();
-            desenharMensagemFimDeJogo();
-            SDL_RenderPresent(renderizador);
-            SDL_Delay(3000); // Delay para visualizar a mensagem de fim de jogo por 3 segundos
             Uint32 tempoTerminoJogo = SDL_GetTicks(); // Tempo quando o jogo termina
             Uint32 duracaoJogo = tempoTerminoJogo - tempoInicioJogo; // Calcula a duração do jogo em milissegundos
+            
+            desenharCena();
+            desenharMensagemFimDeJogo(duracaoJogo); // Passar duração do jogo
+            SDL_RenderPresent(renderizador);
+            SDL_Delay(3000); // Delay para visualizar a mensagem de fim de jogo por 3 segundos
             salvarPontuacao(duracaoJogo); // Salva a duração do jogo
             rodando = false;
             continue;
@@ -331,7 +332,6 @@ void loopJogo(SDL_Texture **texturasLixo, int *probabilidades, int numTexturas, 
         SDL_Delay(16);
     }
 }
-
 // Inicializa todos os componentes SDL necessários
 bool inicializarSDL() {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -746,9 +746,15 @@ void desenharBarraDeVida() {
 }
 
 // Mostra a mensagem de fim de jogo no centro da tela
-void desenharMensagemFimDeJogo() {
-    // Definir a mensagem de fim de jogo
-    const char* mensagem = "Fim de jogo! O mar foi poluído demais.";
+void desenharMensagemFimDeJogo(Uint32 duracaoJogo) {
+    // Calcula o tempo em minutos e segundos
+    Uint32 minutos = duracaoJogo / 60000;
+    Uint32 segundos = (duracaoJogo % 60000) / 1000;
+
+    // Ajustar a mensagem de fim de jogo
+    char mensagem[100];
+    snprintf(mensagem, sizeof(mensagem), "Fim de jogo! O rio foi poluído demais. Tempo: %02u:%02u", minutos, segundos);
+
     SDL_Color branco = {255, 255, 255, 255}; // Cor branca para o texto
 
     // Renderizar o texto da mensagem
